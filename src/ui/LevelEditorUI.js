@@ -2,8 +2,14 @@ import * as THREE from 'three';
 
 const CONTROL_IGNORE_SELECTOR = '#mobile-controls,#mobile-esc-btn,#orbit-btn,#mobile-layout-toggle';
 const EDITOR_INPUT_SELECTOR = 'input,select,textarea,button,[contenteditable="true"]';
+const EDITOR_TEXT_INPUT_SELECTOR = 'input,select,textarea,[contenteditable="true"]';
 const HISTORY_LIMIT = 50;
 const AUTOSAVE_MS = 30000;
+const EDITOR_CAMERA_KEY_CODES = new Set([
+  'KeyW', 'KeyA', 'KeyS', 'KeyD',
+  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+  'Space', 'ShiftLeft', 'ShiftRight',
+]);
 
 const CATEGORY_LABELS = {
   breakable: '可破坏物',
@@ -104,6 +110,7 @@ export class LevelEditorUI {
     this._lastPointerPoint = null;
     this._lastPropertySnapshot = null;
     this._roadHelperGroup = null;
+    this._cameraKeys = new Set();
 
     this._build();
     this._buildSceneHelpers();
@@ -151,6 +158,7 @@ export class LevelEditorUI {
     this.selectedRoadPointIndex = null;
     this._removePreview();
     this._clearDrag();
+    this._cameraKeys.clear();
     this._bindEvents();
     this._startAutosave();
     this._setStatus('编辑器已开启：左侧选择物体，点击地面放置；右键拖动旋转视角，滚轮缩放。');
@@ -163,6 +171,7 @@ export class LevelEditorUI {
     this.root.style.display = 'none';
     this._removePreview();
     this._clearDrag();
+    this._cameraKeys.clear();
     this._stopAutosave();
     this._unbindEvents();
     this._setGizmoVisible(false);
@@ -191,7 +200,22 @@ export class LevelEditorUI {
 
   isTypingInEditor() {
     const focused = document.activeElement;
-    return Boolean(focused && this.root?.contains(focused) && focused.matches?.(EDITOR_INPUT_SELECTOR));
+    return Boolean(focused && this.root?.contains(focused) && focused.matches?.(EDITOR_TEXT_INPUT_SELECTOR));
+  }
+
+  getCameraInput(fallback = {}) {
+    if (!this.visible || this.isTypingInEditor()) return {};
+    const down = (...codes) => codes.some(code => this._cameraKeys.has(code));
+    const hasKeyboardMove = [...EDITOR_CAMERA_KEY_CODES].some(code => this._cameraKeys.has(code));
+    if (!hasKeyboardMove) return fallback || {};
+    return {
+      ...fallback,
+      throttle: down('KeyW', 'ArrowUp') ? 1 : 0,
+      brake: down('KeyS', 'ArrowDown') ? 1 : 0,
+      steerAxis: (down('KeyD', 'ArrowRight') ? 1 : 0) - (down('KeyA', 'ArrowLeft') ? 1 : 0),
+      handbrake: down('Space'),
+      nitro: down('ShiftLeft', 'ShiftRight'),
+    };
   }
 
   hasUnsavedChanges() { return this._dirty; }
@@ -393,7 +417,10 @@ export class LevelEditorUI {
         : `已选择道路基础类型：${this._getRoadProfileLabel(profile)}。点击地面开始放样道路。`);
       this.refresh();
     });
-    this.propertiesEl.addEventListener('focusin', () => { this._lastPropertySnapshot = this.toolMode === 'road' ? this._snapshotLayout() : this._snapshotSelection(); });
+    this.propertiesEl.addEventListener('focusin', event => {
+      this._lastPropertySnapshot = this.toolMode === 'road' ? this._snapshotLayout() : this._snapshotSelection();
+      if (event.target?.matches?.(EDITOR_TEXT_INPUT_SELECTOR)) this._cameraKeys.clear();
+    });
     this.propertiesEl.addEventListener('input', event => this._handlePropertyInput(event, false));
     this.propertiesEl.addEventListener('change', event => this._handlePropertyInput(event, true));
     this._importInput.addEventListener('change', () => this._handleImportFile());
@@ -405,12 +432,16 @@ export class LevelEditorUI {
     this._onPointerDown = event => this._handlePointerDown(event);
     this._onPointerUp = event => this._handlePointerUp(event);
     this._onWheel = event => this._handleWheel(event);
-    this._onKeyDown = event => this._handleKeyDown(event);
+    this._onKeyDown = event => { this._handleCameraKey(event, true); this._handleKeyDown(event); };
+    this._onKeyUp = event => this._handleCameraKey(event, false);
+    this._onWindowBlur = () => { this._cameraKeys.clear(); };
     window.addEventListener('pointermove', this._onPointerMove, true);
     window.addEventListener('pointerdown', this._onPointerDown, true);
     window.addEventListener('pointerup', this._onPointerUp, true);
     window.addEventListener('wheel', this._onWheel, { capture: true, passive: false });
     window.addEventListener('keydown', this._onKeyDown, true);
+    window.addEventListener('keyup', this._onKeyUp, true);
+    window.addEventListener('blur', this._onWindowBlur);
     this._eventsBound = true;
   }
 
@@ -421,6 +452,8 @@ export class LevelEditorUI {
     window.removeEventListener('pointerup', this._onPointerUp, true);
     window.removeEventListener('wheel', this._onWheel, true);
     window.removeEventListener('keydown', this._onKeyDown, true);
+    window.removeEventListener('keyup', this._onKeyUp, true);
+    window.removeEventListener('blur', this._onWindowBlur);
     this._eventsBound = false;
   }
 
@@ -846,6 +879,19 @@ export class LevelEditorUI {
     if (event.code === 'KeyE') this._setEditMode('rotate');
     if (event.code === 'KeyR') this._setEditMode('scale');
     if (event.code === 'KeyF') this.onCameraReset?.();
+  }
+
+  _handleCameraKey(event, pressed) {
+    if (!this.visible || !EDITOR_CAMERA_KEY_CODES.has(event.code)) return;
+    if (event.target?.matches?.(EDITOR_TEXT_INPUT_SELECTOR)) {
+      if (!pressed) this._cameraKeys.delete(event.code);
+      return;
+    }
+    if (pressed) this._cameraKeys.add(event.code);
+    else this._cameraKeys.delete(event.code);
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(event.code)) {
+      event.preventDefault();
+    }
   }
 
   _applyGizmoDrag(event) {

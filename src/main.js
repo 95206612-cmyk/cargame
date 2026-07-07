@@ -716,7 +716,7 @@ class App {
         this._updateAudio(this.delta, inputData, speedKmh, barrierHit || interactiveHit, npcHit);
       });
       if (editorActive) {
-        this._updateEditorCamera(this.delta, rawInputData);
+        this._updateEditorCamera(this.delta, this.levelEditorUI?.getCameraInput?.(rawInputData) || rawInputData);
       } else {
         this._updateCamera(speedKmh, inputData, barrierHit || interactiveHit || npcHit);
         this.camera.follow(this.carModel.root, this.delta);
