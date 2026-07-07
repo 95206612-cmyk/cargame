@@ -402,9 +402,14 @@ export class LevelEditorUI {
       if (action === 'lock-layer') this._toggleLayer(event.target.dataset.layerId, 'locked');
     });
     this.paletteEl.addEventListener('click', event => {
+      const roadSelect = event.target?.closest?.('[data-road-select]')?.dataset?.roadSelect;
       const profile = event.target?.closest?.('[data-road-profile]')?.dataset?.roadProfile;
       const moduleId = event.target?.closest?.('[data-road-module]')?.dataset?.roadModule;
-      if (!profile && !moduleId) return;
+      if (!roadSelect && !profile && !moduleId) return;
+      if (roadSelect) {
+        this._selectRoad(roadSelect, null, '已选中道路，可在右侧二次编辑属性，也可以拖动绿色控制点调整曲线。');
+        return;
+      }
       if (profile) this.selectedRoadProfile = profile;
       if (moduleId) {
         this.selectedRoadModuleId = moduleId;
@@ -573,6 +578,43 @@ export class LevelEditorUI {
     info.className = 'le-empty';
     info.textContent = '道路模式：选择模块后点击地面添加控制点；系统会沿曲线重复摆放基础模型模块，并用简化路面负责车辆物理。';
     this.paletteEl.appendChild(info);
+
+    const roads = this.manager?.getRoads?.() || [];
+    const roadSection = document.createElement('section');
+    roadSection.className = 'le-category';
+    const roadHead = document.createElement('button');
+    roadHead.type = 'button';
+    roadHead.className = 'le-category-head';
+    roadHead.innerHTML = `<span>已有道路</span><span>${roads.length}</span>`;
+    roadSection.appendChild(roadHead);
+    const roadBody = document.createElement('div');
+    roadBody.className = 'le-category-body';
+    if (!roads.length) {
+      const empty = document.createElement('div');
+      empty.className = 'le-empty';
+      empty.textContent = '还没有曲线道路。点击地面放第一个控制点，继续点击追加控制点。';
+      roadBody.appendChild(empty);
+    } else {
+      for (const road of roads) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `le-object-card${this.selectedRoadId === road.id ? ' active' : ''}`;
+        btn.dataset.roadSelect = road.id;
+        const modeLabel = road.generationMode === 'deformModule'
+          ? '模块弯曲'
+          : road.generationMode === 'strip' ? '程序路面' : '引用模块';
+        btn.innerHTML = `
+          <span class="le-thumb">路</span>
+          <span>
+            <span class="le-object-name">${this._escape(road.note || road.id)}</span>
+            <span class="le-object-meta">${modeLabel} · ${road.points?.length || 0} 个控制点 · ${this._escape(this._getRoadModuleLabel(road.moduleId))}</span>
+          </span>
+        `;
+        roadBody.appendChild(btn);
+      }
+    }
+    roadSection.appendChild(roadBody);
+    this.paletteEl.appendChild(roadSection);
 
     const moduleSection = document.createElement('section');
     moduleSection.className = 'le-category';
@@ -773,6 +815,12 @@ export class LevelEditorUI {
       this.domElement?.setPointerCapture?.(event.pointerId);
       return;
     }
+    const pickedRoad = this._pickRoad(event);
+    if (pickedRoad) {
+      event.preventDefault(); event.stopPropagation();
+      this._selectRoad(pickedRoad, null, '已进入道路编辑：拖动绿色控制点改曲线，右侧可改生成方式、模块、宽度和物理。');
+      return;
+    }
     const point = this._pickGround(event);
     if (!point) return;
     event.preventDefault(); event.stopPropagation();
@@ -928,14 +976,10 @@ export class LevelEditorUI {
     const pointHit = this._pickRoadPoint(event);
     if (pointHit) {
       event.preventDefault(); event.stopPropagation();
-      this.selectedIds = [];
-      this.selectedRoadId = pointHit.roadId;
-      this.selectedRoadPointIndex = pointHit.pointIndex;
       const road = this.manager?.getRoad?.(pointHit.roadId);
-      if (road?.profile) this.selectedRoadProfile = road.profile;
-      if (road?.moduleId) this.selectedRoadModuleId = road.moduleId;
       const ground = this._pickGround(event);
       const roadPoint = road?.points?.[pointHit.pointIndex];
+      this._selectRoad(pointHit.roadId, pointHit.pointIndex);
       this._pointerDrag = {
         type: 'roadPoint',
         pointerId: event.pointerId,
@@ -946,21 +990,13 @@ export class LevelEditorUI {
       };
       this.domElement?.setPointerCapture?.(event.pointerId);
       this._setStatus(`已选中道路控制点 #${pointHit.pointIndex + 1}，拖动可调整曲线。`);
-      this.refresh();
       return true;
     }
 
     const roadId = this._pickRoad(event);
     if (roadId) {
       event.preventDefault(); event.stopPropagation();
-      const road = this.manager?.getRoad?.(roadId);
-      if (road?.profile) this.selectedRoadProfile = road.profile;
-      if (road?.moduleId) this.selectedRoadModuleId = road.moduleId;
-      this.selectedIds = [];
-      this.selectedRoadId = roadId;
-      this.selectedRoadPointIndex = null;
-      this._setStatus('已选中道路。点击地面可继续追加控制点。');
-      this.refresh();
+      this._selectRoad(roadId, null, '已选中道路。点击地面可继续追加控制点，点击绿色控制点可拖动或精确输入坐标。');
       return true;
     }
 
@@ -1009,7 +1045,30 @@ export class LevelEditorUI {
     this._setPointer(event);
     const meshes = this.manager?.getRoadMeshes?.() || [];
     const hits = meshes.length ? this._raycaster.intersectObjects(meshes, true) : [];
-    return hits[0]?.object?.userData?.editorRoadId || null;
+    for (const hit of hits) {
+      let node = hit.object;
+      while (node) {
+        if (node.userData?.editorRoadId) return node.userData.editorRoadId;
+        node = node.parent;
+      }
+    }
+    return null;
+  }
+
+  _selectRoad(roadId, pointIndex = null, status = '') {
+    const road = this.manager?.getRoad?.(roadId);
+    if (!road) return false;
+    if (road?.profile) this.selectedRoadProfile = road.profile;
+    if (road?.moduleId) this.selectedRoadModuleId = road.moduleId;
+    this.toolMode = 'road';
+    this.selectedIds = [];
+    this.selectedRoadId = road.id;
+    this.selectedRoadPointIndex = Number.isInteger(pointIndex) ? pointIndex : null;
+    this._removePreview();
+    this._lastPropertySnapshot = this._snapshotLayout();
+    if (status) this._setStatus(status);
+    this.refresh();
+    return true;
   }
 
   _startNewRoad() {
