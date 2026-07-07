@@ -16,12 +16,14 @@
         "track": "/models/track/city-circuit-track.glb",
         "scenery": "/models/track/city-circuit-scenery.glb",
         "skybox": "/models/track/city-circuit-cloud.glb",
+        "skyboxTexture": "/models/track/city-circuit-cloud.jpg",
         "scale": 2.54
       },
       "city-circuit-01": {
         "track": "/models/track/city-circuit-track_01.glb",
         "scenery": "/models/track/city-circuit-scenery_01.glb",
         "skybox": "/models/track/city-circuit-cloud_01.glb",
+        "skyboxTexture": "/models/track/city-circuit-cloud.jpg",
         "sceneryUnlit": true,
         "scale": 1
       },
@@ -116,7 +118,8 @@
       "rain-drop": "/textures/particle/rain-drop.png"
     },
     "skyboxPanoramas": {
-      "city-circuit-cloud": "/textures/skybox/city-circuit-cloud.jpg"
+      "city-circuit-cloud": "/models/track/city-circuit-cloud.jpg",
+      "city-circuit-cloud-01": "/models/track/city-circuit-cloud.jpg"
     },
     "skyboxes": {
       "day-clear": {

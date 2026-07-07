@@ -527,6 +527,9 @@ export class TrackManager {
       const trackModel = await this._loader._loadGLB(trackUrl, { _progress: null });
       this.currentTrackId = trackId;
       const importOptions = this._getTrackImportOptions(cfg);
+      if (cfg?.skyboxTexture) {
+        importOptions.skyboxTexture = await this._loadSkyModelTexture(cfg.skyboxTexture);
+      }
       this._sortTrackNodes(trackModel, importOptions);
       this._alignToGround();
       this._trackData = this._extractTrackData();
@@ -637,6 +640,7 @@ export class TrackManager {
       clone.castShadow = false;
       clone.receiveShadow = false;
       clone.material = this._convertMaterialToUnlit(clone.material, 'scene-sky-model');
+      if (options.skyboxTexture) this._applySkyModelTexture(clone.material, options.skyboxTexture);
       this._markMaterialSharedTextures(clone.material);
       clone.userData.sharedMaterial = false;
       this._configureSkyModelMaterial(clone.material);
@@ -654,6 +658,32 @@ export class TrackManager {
       offset: Array.isArray(cfg?.offset) ? cfg.offset : null,
       sceneryUnlit: cfg?.sceneryUnlit === true,
     };
+  }
+
+  async _loadSkyModelTexture(url) {
+    if (!url || !(await this._loader.assetExists(url))) return null;
+    try {
+      const texture = await this._loader._loadTexture(url, { _progress: null });
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      texture.needsUpdate = true;
+      return texture;
+    } catch (err) {
+      console.warn('[TrackManager] Sky model texture load failed: ' + err.message);
+      return null;
+    }
+  }
+
+  _applySkyModelTexture(material, texture) {
+    if (Array.isArray(material)) {
+      material.forEach(item => this._applySkyModelTexture(item, texture));
+      return;
+    }
+    if (!material || !texture) return;
+    material.map = texture;
+    material.color?.set?.(0xffffff);
+    material.needsUpdate = true;
   }
 
   _convertMaterialToUnlit(material, role = 'unlit') {
