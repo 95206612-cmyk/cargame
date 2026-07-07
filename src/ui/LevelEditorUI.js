@@ -394,6 +394,7 @@ export class LevelEditorUI {
       if (action === 'delete') this._deleteSelection();
       if (action === 'duplicate' || action === 'copy') this._duplicateSelection();
       if (action === 'new-road') this._startNewRoad();
+      if (action === 'select-road-body') this._selectRoad(this.selectedRoadId, null, '已切换为整条道路选择，可用 Gizmo 整体移动、旋转或缩放曲线。');
       if (action === 'delete-road') this._deleteRoadSelection(false);
       if (action === 'delete-road-point') this._deleteRoadSelection(true);
       if (action === 'reverse-road') this._reverseSelectedRoad();
@@ -712,6 +713,7 @@ export class LevelEditorUI {
       return;
     }
     const point = Number.isInteger(this.selectedRoadPointIndex) ? road.points[this.selectedRoadPointIndex] : null;
+    const center = this._getRoadCenter(road.points || []);
     const profiles = this.manager?.getRoadProfiles?.() || ROAD_PROFILE_OPTIONS.map(([id, label]) => ({ id, label }));
     const modules = this.manager?.getRoadModules?.() || [];
     this.propertiesEl.innerHTML = `
@@ -744,10 +746,17 @@ export class LevelEditorUI {
       <div class="le-group"><div class="le-group-title">控制点 ${point ? `#${this.selectedRoadPointIndex + 1}` : ''}</div>
         ${point ? this._roadPointFields(point) : '<div class="le-empty">点击道路上的绿色控制点，可编辑它的 X/Y/Z 坐标。</div>'}
       </div>
+      <div class="le-group"><div class="le-group-title">整体变换</div>
+        <div class="le-empty">${point ? '当前选中的是单个控制点。点击下面“选择整条道路”后，可用底部 W/E/R 切换移动、旋转、缩放，三轴 Gizmo 会整体变换所有控制点。' : '当前选中的是整条道路。底部 W/E/R 可切换移动、旋转、缩放；拖动三轴 Gizmo 会一起变换所有控制点，并重新生成道路模型、车辆物理和 AI 线路。'}</div>
+        <label class="le-field">中心 X<input value="${center.x.toFixed(2)}" disabled></label>
+        <label class="le-field">中心 Y<input value="${center.y.toFixed(2)}" disabled></label>
+        <label class="le-field">中心 Z<input value="${center.z.toFixed(2)}" disabled></label>
+      </div>
       <div class="le-group"><div class="le-group-title">备注</div>
         <label class="le-field">备注<input data-key="road.note" value="${this._escape(road.note || '')}" placeholder="例如：主路 / 支路 / 维修区入口"></label>
       </div>
       <div class="le-prop-actions">
+        <button class="le-btn" data-action="select-road-body" ${point ? '' : 'disabled'}>选择整条道路</button>
         <button class="le-btn" data-action="new-road">新建道路</button>
         <button class="le-btn" data-action="reverse-road">反转方向</button>
         <button class="le-btn le-danger" data-action="delete-road-point" ${point ? '' : 'disabled'}>删除点</button>
@@ -788,16 +797,25 @@ export class LevelEditorUI {
       return;
     }
     if (event.button !== 0) return;
-    if (this.toolMode === 'road') {
-      if (this._handleRoadPointerDown(event)) return;
-    }
     const gizmoAxis = this._pickGizmo(event);
-    if (gizmoAxis && this.selectedIds.length) {
+    const roadTransform = this._canTransformSelectedRoad();
+    if (gizmoAxis && (this.selectedIds.length || roadTransform)) {
       event.preventDefault(); event.stopPropagation();
       const point = this._pickAxisPoint(event, gizmoAxis) || this._pickGround(event);
-      this._pointerDrag = { type: 'gizmo', axis: gizmoAxis, pointerId: event.pointerId, startPoint: point ? point.clone() : null, startLayout: this._snapshotLayout(), startObjects: this._snapshotSelection() };
+      this._pointerDrag = {
+        type: 'gizmo',
+        axis: gizmoAxis,
+        pointerId: event.pointerId,
+        startPoint: point ? point.clone() : null,
+        startLayout: this._snapshotLayout(),
+        startObjects: roadTransform ? [] : this._snapshotSelection(),
+        startRoad: roadTransform ? this._snapshotRoadTransform() : null,
+      };
       this.domElement?.setPointerCapture?.(event.pointerId);
       return;
+    }
+    if (this.toolMode === 'road') {
+      if (this._handleRoadPointerDown(event)) return;
     }
     const picked = this._pickObject(event);
     if (event.shiftKey && !picked) {
@@ -899,7 +917,7 @@ export class LevelEditorUI {
       if (this._layoutChanged(drag.startLayout, after)) {
         const label = drag.type === 'roadPoint'
           ? '移动道路控制点'
-          : drag.type === 'gizmo' ? `${MODE_LABELS[this.editMode]}物体` : '移动物体';
+          : drag.type === 'gizmo' ? `${MODE_LABELS[this.editMode]}${drag.startRoad ? '道路' : '物体'}` : '移动物体';
         this._pushHistory({ label, before: drag.startLayout, after });
         this._markDirty(false);
       }
@@ -944,11 +962,19 @@ export class LevelEditorUI {
 
   _applyGizmoDrag(event) {
     const drag = this._pointerDrag;
-    if (!drag?.axis || !drag.startObjects?.length) return;
+    if (!drag?.axis || (!drag.startObjects?.length && !drag.startRoad)) return;
     const point = this._pickAxisPoint(event, drag.axis) || this._pickGround(event);
     if (!point || !drag.startPoint) return;
     const axisVector = this._getAxisVector(drag.axis);
     const amount = point.clone().sub(drag.startPoint).dot(axisVector);
+    if (drag.startRoad) {
+      this._applyRoadGizmoTransform(drag, axisVector, amount);
+      this._markDirty(false);
+      this._syncSelectionHelpers();
+      this._updateRoadHelpers();
+      this._renderProperties();
+      return;
+    }
     for (const start of drag.startObjects) {
       const obj = this.manager?.getObject?.(start.id);
       if (!obj || this._isLayerLocked(obj.layer)) continue;
@@ -970,6 +996,45 @@ export class LevelEditorUI {
     this._markDirty(false);
     this._syncSelectionHelpers();
     this._renderProperties();
+  }
+
+  _snapshotRoadTransform() {
+    const road = this.manager?.getRoad?.(this.selectedRoadId);
+    if (!road?.points?.length) return null;
+    return {
+      id: road.id,
+      points: road.points.map(point => ({ x: Number(point.x) || 0, y: Number(point.y) || 0, z: Number(point.z) || 0 })),
+      center: this._getRoadCenter(road.points),
+      snapToGround: road.snapToGround,
+    };
+  }
+
+  _applyRoadGizmoTransform(drag, axisVector, amount) {
+    const start = drag.startRoad;
+    if (!start?.id || !start.points?.length || !start.center) return;
+    const center = toVector3(start.center);
+    let points = start.points.map(point => toVector3(point));
+    const patch = {};
+    if (this.editMode === 'move') {
+      const offset = axisVector.clone().multiplyScalar(amount);
+      points = points.map(point => point.add(offset));
+      if (drag.axis === 'y') patch.snapToGround = false;
+    } else if (this.editMode === 'scale') {
+      const scale = clamp(1 + amount * 0.08, 0.1, 10, 1);
+      points = points.map(point => center.clone().add(point.sub(center).multiplyScalar(scale)));
+    } else if (this.editMode === 'rotate') {
+      if (drag.axis !== 'y') return;
+      let angle = amount * 0.05;
+      if (this.rotationSnap) {
+        const step = THREE.MathUtils.degToRad(15);
+        angle = Math.round(angle / step) * step;
+      }
+      points = points.map(point => point.sub(center).applyAxisAngle(new THREE.Vector3(0, 1, 0), angle).add(center));
+    } else {
+      return;
+    }
+    patch.points = points.map(point => ({ x: point.x, y: point.y, z: point.z }));
+    this.manager?.updateRoad?.(start.id, patch, { save: false });
   }
 
   _handleRoadPointerDown(event) {
@@ -1514,7 +1579,16 @@ export class LevelEditorUI {
 
   _updateSceneHelpers() { this._setGridVisible(this.gridVisible); this._syncSelectionHelpers(); this._updateCollisionHelpers(); this._updateRoadHelpers(); }
   _setGridVisible(visible) { if (this._gridHelper) this._gridHelper.visible = this.visible && visible; const center = this._getSelectionCenter() || this._lastPointerPoint; if (this._gridHelper && center) this._gridHelper.position.set(center.x, center.y + 0.015, center.z); }
-  _syncSelectionHelpers() { const center = this._getSelectionCenter(); if (!center || !this.selectedIds.length || this.toolMode === 'road') { this._setGizmoVisible(false); return; } this._gizmo.position.copy(center); this._gizmo.scale.setScalar(this.editMode === 'scale' ? 1.25 : this.editMode === 'rotate' ? 1.45 : 1); this._setGizmoVisible(true); }
+  _syncSelectionHelpers() {
+    const center = this._getSelectionCenter();
+    if (!center || (!this.selectedIds.length && !this._canTransformSelectedRoad())) {
+      this._setGizmoVisible(false);
+      return;
+    }
+    this._gizmo.position.copy(center);
+    this._gizmo.scale.setScalar(this.editMode === 'scale' ? 1.25 : this.editMode === 'rotate' ? 1.45 : 1);
+    this._setGizmoVisible(true);
+  }
   _setGizmoVisible(visible) { if (this._gizmo) this._gizmo.visible = this.visible && visible; }
 
   _updateCollisionHelpers() {
@@ -1593,9 +1667,7 @@ export class LevelEditorUI {
       const road = this.manager?.getRoad?.(this.selectedRoadId);
       if (road?.points?.length) {
         if (Number.isInteger(this.selectedRoadPointIndex) && road.points[this.selectedRoadPointIndex]) return toVector3(road.points[this.selectedRoadPointIndex]);
-        const center = new THREE.Vector3();
-        for (const point of road.points) center.add(toVector3(point));
-        return center.multiplyScalar(1 / road.points.length);
+        return this._getRoadCenter(road.points);
       }
     }
     const selected = this._getSelectedObjects();
@@ -1603,6 +1675,19 @@ export class LevelEditorUI {
     const center = new THREE.Vector3();
     for (const obj of selected) center.add(toVector3(obj.position));
     return center.multiplyScalar(1 / selected.length);
+  }
+  _canTransformSelectedRoad() {
+    return this.toolMode === 'road'
+      && Boolean(this.selectedRoadId)
+      && this.selectedRoadPointIndex == null
+      && Boolean(this.manager?.getRoad?.(this.selectedRoadId)?.points?.length);
+  }
+  _getRoadCenter(points = []) {
+    const valid = points.filter(Boolean);
+    const center = new THREE.Vector3();
+    if (!valid.length) return center;
+    for (const point of valid) center.add(toVector3(point));
+    return center.multiplyScalar(1 / valid.length);
   }
   _getSelectedObjects() { return this.selectedIds.map(id => this.manager?.getObject?.(id)).filter(Boolean); }
   _getAxisVector(axis) { if (this.spaceMode === 'local' && this.selectedIds.length === 1) { const obj = this.manager?.getObject?.(this.selectedIds[0]); if (obj && axis !== 'y') { const vector = axis === 'x' ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1); return vector.applyAxisAngle(new THREE.Vector3(0, 1, 0), obj.rotationY || 0).normalize(); } } if (axis === 'x') return new THREE.Vector3(1, 0, 0); if (axis === 'y') return new THREE.Vector3(0, 1, 0); return new THREE.Vector3(0, 0, 1); }
