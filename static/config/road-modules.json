@@ -1,0 +1,43 @@
+{
+  "modules": [
+    {
+      "id": "asphalt_straight",
+      "label": "沥青直道模块",
+      "category": "road",
+      "profile": "asphalt_2lane",
+      "url": "/models/road-modules/asphalt-straight.gltf",
+      "length": 8,
+      "width": 8,
+      "spacing": 7.8,
+      "scale": 1,
+      "yOffset": 0.04,
+      "yawOffset": 0
+    },
+    {
+      "id": "concrete_straight",
+      "label": "混凝土直道模块",
+      "category": "road",
+      "profile": "concrete_service",
+      "url": "/models/road-modules/concrete-straight.gltf",
+      "length": 8,
+      "width": 8,
+      "spacing": 7.8,
+      "scale": 1,
+      "yOffset": 0.04,
+      "yawOffset": 0
+    },
+    {
+      "id": "dirt_straight",
+      "label": "土路直道模块",
+      "category": "road",
+      "profile": "dirt_rally",
+      "url": "/models/road-modules/dirt-straight.gltf",
+      "length": 8,
+      "width": 7,
+      "spacing": 7.6,
+      "scale": 1,
+      "yOffset": 0.05,
+      "yawOffset": 0
+    }
+  ]
+}

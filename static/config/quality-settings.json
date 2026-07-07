@@ -1,0 +1,54 @@
+{
+  "presets": {
+    "low": {
+      "shadows": false,
+      "shadowMapSize": 512,
+      "antialias": false,
+      "pixelRatio": 1,
+      "reflections": false,
+      "particleLimit": 200,
+      "drawDistance": 300,
+      "lodBias": 1.5,
+      "textureQuality": 0.5,
+      "postProcessing": false
+    },
+    "medium": {
+      "shadows": true,
+      "shadowMapSize": 1024,
+      "antialias": true,
+      "pixelRatio": 1,
+      "reflections": false,
+      "particleLimit": 500,
+      "drawDistance": 500,
+      "lodBias": 1.0,
+      "textureQuality": 0.75,
+      "postProcessing": false
+    },
+    "high": {
+      "shadows": true,
+      "shadowMapSize": 2048,
+      "antialias": true,
+      "pixelRatio": 1.5,
+      "reflections": true,
+      "particleLimit": 1000,
+      "drawDistance": 800,
+      "lodBias": 0.5,
+      "textureQuality": 1.0,
+      "postProcessing": true
+    },
+    "ultra": {
+      "shadows": true,
+      "shadowMapSize": 4096,
+      "antialias": true,
+      "pixelRatio": 2,
+      "reflections": true,
+      "particleLimit": 2000,
+      "drawDistance": 1200,
+      "lodBias": 0,
+      "textureQuality": 1.0,
+      "postProcessing": true
+    }
+  },
+  "autoDetect": true,
+  "targetFPS": 60
+}

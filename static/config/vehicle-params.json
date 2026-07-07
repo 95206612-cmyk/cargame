@@ -1,0 +1,53 @@
+{
+  "default": {
+    "mass": 1200,
+    "engineForce": 2500,
+    "brakeForce": 60,
+    "maxSteering": 0.6,
+    "maxSpeed": 220,
+    "wheelRadius": 0.35,
+    "suspensionStiffness": 30,
+    "suspensionDamping": 3.0,
+    "suspensionCompression": 4.0,
+    "rollInfluence": 0.2,
+    "frictionSlip": 5.0,
+    "wheelFriction": 1000,
+    "chassisWidth": 1.8,
+    "chassisHeight": 0.6,
+    "chassisLength": 4.2
+  },
+  "sports": {
+    "mass": 1000,
+    "engineForce": 3500,
+    "brakeForce": 80,
+    "maxSteering": 0.65,
+    "maxSpeed": 280,
+    "wheelRadius": 0.33,
+    "suspensionStiffness": 40,
+    "suspensionDamping": 2.5,
+    "suspensionCompression": 5.0,
+    "rollInfluence": 0.15,
+    "frictionSlip": 6.0,
+    "wheelFriction": 1200,
+    "chassisWidth": 1.9,
+    "chassisHeight": 0.5,
+    "chassisLength": 4.4
+  },
+  "truck": {
+    "mass": 2500,
+    "engineForce": 4000,
+    "brakeForce": 100,
+    "maxSteering": 0.5,
+    "maxSpeed": 160,
+    "wheelRadius": 0.45,
+    "suspensionStiffness": 25,
+    "suspensionDamping": 4.0,
+    "suspensionCompression": 3.0,
+    "rollInfluence": 0.25,
+    "frictionSlip": 4.0,
+    "wheelFriction": 800,
+    "chassisWidth": 2.2,
+    "chassisHeight": 0.9,
+    "chassisLength": 5.5
+  }
+}

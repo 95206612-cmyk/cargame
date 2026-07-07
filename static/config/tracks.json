@@ -1,0 +1,58 @@
+{
+  "tracks": [
+    {
+      "id": "city_circuit",
+      "name": "City Circuit",
+      "laps": 3,
+      "length": 3509,
+      "surface": "asphalt",
+      "difficulty": 1,
+      "unlocked": true
+    },
+    {
+      "id": "city_circuit_01",
+      "name": "City Circuit 01",
+      "laps": 3,
+      "length": 1955,
+      "surface": "asphalt",
+      "difficulty": 1,
+      "unlocked": true
+    },
+    {
+      "id": "mountain_pass",
+      "name": "Mountain Pass",
+      "laps": 2,
+      "length": 6800,
+      "surface": "asphalt",
+      "difficulty": 2,
+      "unlocked": true
+    },
+    {
+      "id": "dirt_rally",
+      "name": "Dirt Rally",
+      "laps": 2,
+      "length": 5100,
+      "surface": "dirt",
+      "difficulty": 2,
+      "unlocked": false
+    },
+    {
+      "id": "desert_dash",
+      "name": "Desert Dash",
+      "laps": 1,
+      "length": 12000,
+      "surface": "sand",
+      "difficulty": 3,
+      "unlocked": false
+    },
+    {
+      "id": "coastal_highway",
+      "name": "Coastal Highway",
+      "laps": 3,
+      "length": 5500,
+      "surface": "asphalt",
+      "difficulty": 1,
+      "unlocked": true
+    }
+  ]
+}

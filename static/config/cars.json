@@ -1,0 +1,94 @@
+{
+  "tuner": {
+    "id": "tuner",
+    "name": "街改车",
+    "category": "tuner",
+    "description": "轻量化街车改装，漂移灵活，适合弯道技术型车手",
+    "unlockLevel": 0,
+    "price": 0,
+    "baseStats": {
+      "mass": 950,
+      "engineForce": 2800,
+      "brakeForce": 55,
+      "maxSteeringAngle": 1.05,
+      "maxSpeed": 210,
+      "wheelFriction": 1100,
+      "frictionSlip": 6.0,
+      "suspensionStiffness": 32,
+      "suspensionDamping": 2.5,
+      "nitroCapacity": 100,
+      "driftCoefficient": 1.4
+    },
+    "bodyStyle": "compact",
+    "defaultColor": "#3498db"
+  },
+  "coupe": {
+    "id": "coupe",
+    "name": "性能轿跑",
+    "category": "coupe",
+    "description": "均衡性能轿跑，加速与操控兼顾，适合全路况",
+    "unlockLevel": 1,
+    "price": 5000,
+    "baseStats": {
+      "mass": 1100,
+      "engineForce": 3800,
+      "brakeForce": 45,
+      "maxSteeringAngle": 0.95,
+      "maxSpeed": 260,
+      "wheelFriction": 1200,
+      "frictionSlip": 6.5,
+      "suspensionStiffness": 35,
+      "suspensionDamping": 2.8,
+      "nitroCapacity": 100,
+      "driftCoefficient": 1.0
+    },
+    "bodyStyle": "sports",
+    "defaultColor": "#e74c3c"
+  },
+  "super": {
+    "id": "super",
+    "name": "顶级超跑",
+    "category": "super",
+    "description": "极致极速机器，直线加速迅猛，过弯需要精准操控",
+    "unlockLevel": 3,
+    "price": 25000,
+    "baseStats": {
+      "mass": 1050,
+      "engineForce": 5200,
+      "brakeForce": 65,
+      "maxSteeringAngle": 0.85,
+      "maxSpeed": 330,
+      "wheelFriction": 1300,
+      "frictionSlip": 7.0,
+      "suspensionStiffness": 45,
+      "suspensionDamping": 2.0,
+      "nitroCapacity": 120,
+      "driftCoefficient": 0.5
+    },
+    "bodyStyle": "supercar",
+    "defaultColor": "#f39c12"
+  },
+  "classic": {
+    "id": "classic",
+    "name": "复古老爷车",
+    "category": "classic",
+    "description": "经典美式肌肉车身，重量大但气势十足，独特驾驶质感",
+    "unlockLevel": 5,
+    "price": 15000,
+    "baseStats": {
+      "mass": 1500,
+      "engineForce": 4500,
+      "brakeForce": 55,
+      "maxSteeringAngle": 0.80,
+      "maxSpeed": 200,
+      "wheelFriction": 900,
+      "frictionSlip": 5.0,
+      "suspensionStiffness": 25,
+      "suspensionDamping": 3.8,
+      "nitroCapacity": 80,
+      "driftCoefficient": 0.8
+    },
+    "bodyStyle": "muscle",
+    "defaultColor": "#2c3e50"
+  }
+}

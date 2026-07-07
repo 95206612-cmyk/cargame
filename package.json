@@ -1,0 +1,67 @@
+{
+  "name": "cargame",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node tools/static-check.js && npm run build",
+    "test:static": "node tools/static-check.js",
+    "test:smoke": "node tools/smoke-test.js",
+    "server": "node start-server.js",
+    "server:start": "cd server && npm start",
+    "electron:dev": "vite build && electron . --dev",
+    "electron:build": "vite build && electron-builder",
+    "electron:build:portable": "vite build && electron-builder --win portable",
+    "dist": "vite build && electron-builder --win nsis portable",
+    "test:network": "node tools/network-integration-test.js"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.4.1",
+    "@capacitor/cli": "^8.4.1",
+    "@capacitor/core": "^8.4.1",
+    "@capacitor/screen-orientation": "^8.0.1",
+    "cannon-es": "^0.20.0",
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "electron": "^35.7.5",
+    "electron-builder": "^26.15.3",
+    "playwright": "^1.61.1",
+    "typescript": "^6.0.3",
+    "vite": "^6.0.0"
+  },
+  "build": {
+    "appId": "com.cargame.streetracer",
+    "productName": "Street Racer",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Street Racer"
+    },
+    "portable": {
+      "artifactName": "StreetRacer_Portable_${version}.exe"
+    }
+  }
+}

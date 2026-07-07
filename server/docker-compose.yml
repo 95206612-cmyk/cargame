@@ -1,0 +1,14 @@
+﻿services:
+  street-racer-server:
+    build: .
+    container_name: street-racer-server
+    restart: unless-stopped
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8080
+      PUBLIC_URL: ws://127.0.0.1:8080
+      ROOM_IDLE_MS: 300000
+      MAX_ROOMS: 100
+      MAX_PLAYERS_PER_ROOM: 6
+    ports:
+      - "8080:8080"

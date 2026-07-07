@@ -1,0 +1,199 @@
+{
+  "_comment": "Centralized asset path configuration. static/ is the Vite publicDir; files are served at root. To add new assets, add entries here; no code changes required.",
+
+  "models": {
+    "cars": {
+      "sport-01": "/models/cars/body.glb",
+      "muscle-01": "/models/cars/body.glb",
+      "truck-01": "/models/cars/body.glb",
+      "suv-01": "/models/cars/body.glb",
+      "sedan-01": "/models/cars/body.glb",
+      "super-01": "/models/cars/body.glb",
+      "body": "/models/cars/body.glb"
+    },
+    "tracks": {
+      "city-circuit": {
+        "track": "/models/track/city-circuit-track.glb",
+        "scenery": "/models/track/city-circuit-scenery.glb",
+        "skybox": "/models/track/city-circuit-cloud.glb",
+        "scale": 2.54
+      },
+      "city-circuit-01": {
+        "track": "/models/track/city-circuit-track_01.glb",
+        "scenery": "/models/track/city-circuit-scenery_01.glb",
+        "skybox": "/models/track/city-circuit-cloud_01.glb",
+        "sceneryUnlit": true,
+        "scale": 1
+      },
+      "mountain-pass": {
+        "track": "/models/track/mountain-pass-track.glb",
+        "scenery": "/models/track/mountain-pass-scenery.glb"
+      },
+      "stadium-arena": {
+        "track": "/models/track/stadium-arena-track.glb",
+        "scenery": "/models/track/stadium-arena-scenery.glb"
+      },
+      "coastal-highway": {
+        "track": "/models/track/coastal-highway-track.glb",
+        "scenery": "/models/track/coastal-highway-scenery.glb"
+      }
+    },
+    "skyboxes": {
+      "city-circuit-cloud": "/models/track/city-circuit-cloud.glb",
+      "city-circuit-cloud-01": "/models/track/city-circuit-cloud_01.glb"
+    },
+    "props": {
+      "barrier-concrete": "/models/props/barrier-concrete.glb",
+      "barrier-plastic": "/models/props/barrier-plastic.glb",
+      "lamp-street": "/models/props/lamp-street.glb",
+      "lamp-track": "/models/props/lamp-track.glb",
+      "sign-start": "/models/props/sign-start.glb",
+      "sign-checkpoint": "/models/props/sign-checkpoint.glb",
+      "billboard-large": "/models/props/billboard-large.glb",
+      "cone-traffic": "/models/props/cone-traffic.glb",
+      "tree-palm": "/models/props/tree-palm.glb",
+      "tree-pine": "/models/props/tree-pine.glb"
+    }
+  },
+
+  "textures": {
+    "carLiveries": {
+      "default-red": {
+        "basecolor": "/textures/car-pbr/default_red_basecolor.png",
+        "normal": "/textures/car-pbr/default_red_normal.png",
+        "metallic": "/textures/car-pbr/default_red_metallic.png",
+        "roughness": "/textures/car-pbr/default_red_roughness.png",
+        "ao": "/textures/car-pbr/default_red_ao.png"
+      },
+      "default-blue": {
+        "basecolor": "/textures/car-pbr/default_blue_basecolor.png",
+        "normal": "/textures/car-pbr/default_blue_normal.png",
+        "metallic": "/textures/car-pbr/default_blue_metallic.png",
+        "roughness": "/textures/car-pbr/default_blue_roughness.png",
+        "ao": "/textures/car-pbr/default_blue_ao.png"
+      },
+      "default-black": {
+        "basecolor": "/textures/car-pbr/default_black_basecolor.png",
+        "normal": "/textures/car-pbr/default_black_normal.png",
+        "metallic": "/textures/car-pbr/default_black_metallic.png",
+        "roughness": "/textures/car-pbr/default_black_roughness.png"
+      }
+    },
+    "trackSurfaces": {
+      "asphalt-clean": {
+        "basecolor": "/textures/track-texture/asphalt_clean_basecolor.png",
+        "normal": "/textures/track-texture/asphalt_clean_normal.png",
+        "roughness": "/textures/track-texture/asphalt_clean_roughness.png"
+      },
+      "asphalt-worn": {
+        "basecolor": "/textures/track-texture/asphalt_worn_basecolor.png",
+        "normal": "/textures/track-texture/asphalt_worn_normal.png",
+        "roughness": "/textures/track-texture/asphalt_worn_roughness.png"
+      },
+      "concrete-barrier": {
+        "basecolor": "/textures/track-texture/concrete_barrier_basecolor.png",
+        "normal": "/textures/track-texture/concrete_barrier_normal.png",
+        "roughness": "/textures/track-texture/concrete_barrier_roughness.png"
+      },
+      "dirt-path": {
+        "basecolor": "/textures/track-texture/dirt_path_basecolor.png",
+        "normal": "/textures/track-texture/dirt_path_normal.png",
+        "roughness": "/textures/track-texture/dirt_path_roughness.png"
+      },
+      "grass-field": {
+        "basecolor": "/textures/track-texture/grass_field_basecolor.png",
+        "normal": "/textures/track-texture/grass_field_normal.png",
+        "roughness": "/textures/track-texture/grass_field_roughness.png"
+      }
+    },
+    "particles": {
+      "smoke-puff": "/textures/particle/smoke-puff.png",
+      "smoke-trail": "/textures/particle/smoke-trail.png",
+      "fire-burst": "/textures/particle/fire-burst.png",
+      "spark-shower": "/textures/particle/spark-shower.png",
+      "dust-kickup": "/textures/particle/dust-kickup.png",
+      "nitro-burst": "/textures/particle/nitro-burst.png",
+      "rain-drop": "/textures/particle/rain-drop.png"
+    },
+    "skyboxPanoramas": {
+      "city-circuit-cloud": "/textures/skybox/city-circuit-cloud.jpg"
+    },
+    "skyboxes": {
+      "day-clear": {
+        "px": "/textures/skybox/day_clear_px.png",
+        "nx": "/textures/skybox/day_clear_nx.png",
+        "py": "/textures/skybox/day_clear_py.png",
+        "ny": "/textures/skybox/day_clear_ny.png",
+        "pz": "/textures/skybox/day_clear_pz.png",
+        "nz": "/textures/skybox/day_clear_nz.png"
+      },
+      "day-cloudy": {
+        "px": "/textures/skybox/day_cloudy_px.png",
+        "nx": "/textures/skybox/day_cloudy_nx.png",
+        "py": "/textures/skybox/day_cloudy_py.png",
+        "ny": "/textures/skybox/day_cloudy_ny.png",
+        "pz": "/textures/skybox/day_cloudy_pz.png",
+        "nz": "/textures/skybox/day_cloudy_nz.png"
+      },
+      "sunset": {
+        "px": "/textures/skybox/sunset_px.png",
+        "nx": "/textures/skybox/sunset_nx.png",
+        "py": "/textures/skybox/sunset_py.png",
+        "ny": "/textures/skybox/sunset_ny.png",
+        "pz": "/textures/skybox/sunset_pz.png",
+        "nz": "/textures/skybox/sunset_nz.png"
+      },
+      "night": {
+        "px": "/textures/skybox/night_px.png",
+        "nx": "/textures/skybox/night_nx.png",
+        "py": "/textures/skybox/night_py.png",
+        "ny": "/textures/skybox/night_ny.png",
+        "pz": "/textures/skybox/night_pz.png",
+        "nz": "/textures/skybox/night_nz.png"
+      }
+    },
+    "uiSprites": {
+      "icon-nitro": "/textures/ui-sprite/icon-nitro.png",
+      "icon-handbrake": "/textures/ui-sprite/icon-handbrake.png",
+      "icon-reset": "/textures/ui-sprite/icon-reset.png",
+      "icon-camera": "/textures/ui-sprite/icon-camera.png",
+      "marker-player": "/textures/ui-sprite/minimap-marker-player.png",
+      "marker-opponent": "/textures/ui-sprite/minimap-marker-opponent.png",
+      "badge-gold": "/textures/ui-sprite/rank-badge-gold.png",
+      "badge-silver": "/textures/ui-sprite/rank-badge-silver.png",
+      "badge-bronze": "/textures/ui-sprite/rank-badge-bronze.png",
+      "gauge-speedo": "/textures/ui-sprite/gauge-speedometer.png",
+      "gauge-tacho": "/textures/ui-sprite/gauge-tachometer.png"
+    }
+  },
+
+  "audio": {
+    "engine-idle": "/audio/engine-idle.wav",
+    "engine-rev": "/audio/engine-rev.wav",
+    "engine-redline": "/audio/engine-redline.wav",
+    "crash-light": "/audio/crash-light.wav",
+    "crash-heavy": "/audio/crash-heavy.wav",
+    "tire-asphalt": "/audio/tire-asphalt.wav",
+    "tire-dirt": "/audio/tire-dirt.wav",
+    "nitro-boost": "/audio/nitro-boost.wav",
+    "ui-click": "/audio/ui-click.wav",
+    "ui-countdown": "/audio/ui-countdown.wav",
+    "ambient-crowd": "/audio/ambient-crowd.wav",
+    "ambient-wind": "/audio/ambient-wind.wav",
+    "music-menu": "/audio/music-menu.mp3",
+    "music-race": "/audio/music-race.mp3"
+  },
+
+  "_extensions": {
+    "models.cars": {},
+    "models.tracks": {},
+    "models.skyboxes": {},
+    "models.props": {},
+    "textures.carLiveries": {},
+    "textures.trackSurfaces": {},
+    "textures.particles": {},
+    "textures.skyboxes": {},
+    "textures.uiSprites": {},
+    "audio": {}
+  }
+}

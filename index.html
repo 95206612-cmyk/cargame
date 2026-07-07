@@ -1,0 +1,604 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#1a1a2e" />
+  <title>Street Racer</title>
+  <link rel="manifest" href="./manifest.json" />
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: #1a1a2e;
+      touch-action: manipulation;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    }
+
+    #game-canvas {
+      display: block; width: 100%; height: 100%;
+      position: fixed; top: 0; left: 0; z-index: 1;
+    }
+
+    /* ---- All overlay panels ---- */
+    .overlay {
+      display: none;
+      position: fixed; inset: 0; z-index: 200;
+      pointer-events: auto;
+    }
+    .overlay.show { display: flex; }
+
+    /* ---- Rotate hint ---- */
+    #rotate-hint {
+      background: #1a1a2e;
+      display: none;
+      flex-direction: column;
+      align-items: center; justify-content: center;
+      color: #fff;
+    }
+    #rotate-hint .icon {
+      width: 80px; height: 80px;
+      margin-bottom: 24px;
+      animation: rotate-phone 1.5s ease-in-out infinite;
+    }
+    @keyframes rotate-phone {
+      0%, 100% { transform: rotate(0deg); }
+      50% { transform: rotate(90deg); }
+    }
+    #rotate-hint .icon svg { width: 100%; height: 100%; }
+    #rotate-hint p { font-size: 1.1rem; opacity: 0.8; }
+
+    /* ---- Loading screen ---- */
+    #loading-screen {
+      background: #1a1a2e;
+      transition: opacity 0.5s;
+    }
+    #loading-screen.hidden {
+      opacity: 0; pointer-events: none;
+    }
+    #loading-logo {
+      font-size: 2rem; font-weight: 700; color: #fff;
+      letter-spacing: 4px; margin-bottom: 32px;
+    }
+    #loading-bar-bg {
+      width: min(320px, 70vw); height: 6px;
+      background: rgba(255,255,255,0.12);
+      border-radius: 3px; overflow: hidden;
+    }
+    #loading-bar-fill {
+      width: 0%; height: 100%;
+      background: linear-gradient(90deg, #e74c3c, #f39c12, #2ecc71);
+      border-radius: 3px;
+      transition: width 0.3s;
+    }
+    #loading-percent {
+      margin-top: 12px; font-size: 0.85rem; color: rgba(255,255,255,0.6);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ---- Audio unlock ---- */
+    #audio-unlock {
+      background: rgba(0,0,0,0.75);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+    #audio-unlock button {
+      padding: 16px 48px; font-size: 1.2rem; font-weight: 700;
+      border: none; border-radius: 12px;
+      background: #2ecc71; color: #fff;
+      cursor: pointer;
+      transition: transform 0.15s, background 0.2s;
+    }
+    #audio-unlock button:hover { background: #27ae60; transform: scale(1.04); }
+    #audio-unlock button:active { transform: scale(0.97); }
+    #audio-unlock p { margin-top: 16px; color: rgba(255,255,255,0.7); font-size: 0.9rem; }
+
+    /* ==================== MAIN MENU ==================== */
+    #main-menu {
+      background: linear-gradient(135deg, #0a0a1e 0%, #1a1a3e 50%, #0d0d2b 100%);
+      flex-direction: column;
+      align-items: center; justify-content: center;
+      overflow-y: auto;
+    }
+    #main-menu .menu-header {
+      position: absolute; top: 20px; left: 0; right: 0;
+      display: flex; justify-content: center; gap: 32px;
+      pointer-events: none;
+    }
+    #main-menu .menu-header span {
+      font-size: 0.9rem; font-weight: bold;
+    }
+    #main-menu .menu-title {
+      font-size: 3rem; font-weight: 900; letter-spacing: 6px;
+      color: #ffd700; margin-bottom: 8px;
+      text-shadow: 0 0 40px rgba(255,215,0,0.3);
+    }
+    #main-menu .menu-subtitle {
+      font-size: 0.8rem; color: #888; letter-spacing: 4px; margin-bottom: 32px;
+    }
+    #main-menu .menu-grid {
+      display: flex; flex-wrap: wrap; gap: 16px;
+      justify-content: center; max-width: 520px; padding: 0 20px;
+    }
+    #main-menu .menu-btn {
+      width: 140px; height: 120px;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 10px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      cursor: pointer;
+      color: #fff; font-family: inherit; font-size: inherit;
+      transition: all 0.15s;
+      -webkit-tap-highlight-color: transparent;
+      outline: none;
+      padding: 8px;
+    }
+    #main-menu .menu-btn:hover,
+    #main-menu .menu-btn:focus-visible {
+      background: rgba(255,255,255,0.10);
+      border-color: #ffd700;
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    #main-menu .menu-btn:active {
+      transform: scale(0.95);
+    }
+    #main-menu .menu-btn .icon {
+      width: 46px; height: 46px;
+      display: grid; place-items: center;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.08);
+      font-size: 1.75rem;
+      pointer-events: none;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+    }
+    #main-menu .menu-btn .label {
+      font-size: 0.82rem;
+      font-weight: 900;
+      letter-spacing: 2px;
+      pointer-events: none;
+      text-align: center;
+    }
+    #main-menu .menu-btn .desc { display: none; }
+    #main-menu .weather-panel {
+      margin-top: 22px;
+      width: min(620px, calc(100vw - 36px));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding: 10px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.035);
+      border-radius: 8px;
+    }
+    #main-menu .weather-title {
+      min-width: 108px;
+      font-size: 0.68rem;
+      font-weight: 900;
+      color: #8fb9ff;
+      letter-spacing: 1.6px;
+      text-align: center;
+    }
+    #main-menu .weather-title span {
+      display: block;
+      margin-top: 3px;
+      color: #ffd700;
+      font-size: 0.62rem;
+      letter-spacing: 1px;
+    }
+    #main-menu .weather-btn {
+      min-width: 78px;
+      min-height: 38px;
+      padding: 0 10px;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(255,255,255,0.035);
+      color: #cfd8e3;
+      border-radius: 6px;
+      font: 800 0.66rem/1 'Segoe UI', system-ui, sans-serif;
+      letter-spacing: 0.9px;
+      cursor: pointer;
+    }
+    #main-menu .weather-btn:hover,
+    #main-menu .weather-btn:focus-visible {
+      outline: none;
+      border-color: #8fb9ff;
+      background: rgba(143,185,255,0.12);
+      color: #fff;
+    }
+    #main-menu .weather-btn.active {
+      border-color: #ffd700;
+      background: rgba(255,215,0,0.18);
+      color: #ffd700;
+    }
+    #track-select-dialog {
+      display: none; position: fixed; inset: 0; z-index: 450;
+      background: rgba(0,0,0,0.72); align-items: center; justify-content: center;
+      padding: 22px; pointer-events: auto;
+    }
+    #track-select-dialog.show { display: flex; }
+    #track-select-dialog .track-panel {
+      width: min(560px, 94vw); max-height: min(620px, 86vh); overflow-y: auto;
+      background: rgba(8,12,28,0.96); border: 1px solid rgba(255,255,255,0.14);
+      box-shadow: 0 18px 48px rgba(0,0,0,0.55); padding: 20px;
+    }
+    #track-select-dialog .track-title {
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 1rem; font-weight: 800; color: #ffd700; letter-spacing: 2px;
+      margin-bottom: 14px;
+    }
+    #track-select-dialog .track-close {
+      width: 36px; height: 36px; border: 1px solid rgba(255,255,255,0.2);
+      background: transparent; color: #fff; cursor: pointer; font-size: 1.2rem;
+    }
+    #track-select-dialog .track-list { display: grid; gap: 10px; }
+    #track-select-dialog .track-option {
+      min-height: 74px; border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.035); color: #fff; cursor: pointer;
+      display: grid; grid-template-columns: 1fr auto; align-items: center;
+      gap: 12px; padding: 12px 14px; text-align: left; font-family: inherit;
+    }
+    #track-select-dialog .track-option:hover,
+    #track-select-dialog .track-option:focus-visible {
+      border-color: #ffd700; background: rgba(255,215,0,0.10); outline: none;
+    }
+    #track-select-dialog .track-option.active { border-color: #2ecc71; }
+    #track-select-dialog .track-name { font-size: 0.95rem; font-weight: 800; }
+    #track-select-dialog .track-meta { font-size: 0.68rem; color: #9aa4b2; margin-top: 4px; }
+    #track-select-dialog .track-badge { font-size: 0.66rem; color: #2ecc71; font-weight: 800; }
+    #main-menu .menu-hint {
+      margin-top: 28px; font-size: 0.65rem; color: #555;
+    }
+    #main-menu .menu-footer {
+      position: absolute; bottom: 16px; font-size: 0.6rem; color: #444;
+    }
+
+    /* ==================== HUD ==================== */
+    #hud {
+      pointer-events: none;
+      flex-direction: column;
+    }
+    #hud .hud-speed {
+      position: absolute; bottom: 40px; right: 30px;
+      font-size: 3.5rem; font-weight: 900; color: #fff;
+      text-shadow: 0 0 20px rgba(255,255,255,0.3);
+      line-height: 1;
+    }
+    #hud .hud-unit {
+      font-size: 1rem; color: #888; display: block;
+    }
+    #hud .hud-lap {
+      position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+      font-size: 1.2rem; font-weight: bold; color: #ffd700;
+      letter-spacing: 2px;
+    }
+    #hud .hud-timer {
+      position: absolute; top: 50px; left: 50%; transform: translateX(-50%);
+      font-size: 1.5rem; font-weight: bold; color: #fff;
+      font-variant-numeric: tabular-nums;
+    }
+    #hud .hud-nitro {
+      position: absolute; bottom: 50px; left: 30px;
+      width: 8px; height: 120px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 4px; overflow: hidden;
+    }
+    #hud .hud-nitro-fill {
+      position: absolute; bottom: 0; width: 100%;
+      background: linear-gradient(to top, #ff6b00, #ffd700);
+      border-radius: 4px; transition: height 0.2s;
+    }
+    #hud .hud-best {
+      position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
+      font-size: 0.8rem; color: #2ecc71;
+    }
+    #hud .hud-rank {
+      position: absolute; top: 20px; right: 30px;
+      font-size: 1.5rem; font-weight: bold; color: #ffd700;
+    }
+
+    /* ---- Mobile touch controls ---- */
+    #mobile-controls {
+      pointer-events: none;
+    }
+    #mobile-controls .touch-btn {
+      pointer-events: auto;
+      border-radius: 50%;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+      transition: transform 0.05s, opacity 0.1s;
+      opacity: 0.7;
+      border: none;
+      color: #fff;
+      font-family: inherit;
+      font-weight: bold;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #mobile-controls .touch-btn:active {
+      transform: scale(0.9); opacity: 1;
+    }
+
+    /* ---- Fatal error ---- */
+    #fatal-error {
+      background: rgba(0,0,0,0.95);
+      flex-direction: column;
+      align-items: center; justify-content: center;
+      color: #fff;
+      text-align: center;
+    }
+    #fatal-error .err-icon {
+      font-size: 4rem; color: #e74c3c; margin-bottom: 16px;
+    }
+    #fatal-error .err-title {
+      font-size: 1.4rem; font-weight: bold; margin-bottom: 8px;
+    }
+    #fatal-error .err-msg {
+      font-size: 0.8rem; color: #888; max-width: 400px; margin-bottom: 24px;
+    }
+    #fatal-error button {
+      padding: 12px 32px; font-size: 1rem; font-weight: bold;
+      border: none; border-radius: 8px;
+      background: #e74c3c; color: #fff;
+      cursor: pointer;
+    }
+    /* ---- Orbit camera button ---- */
+    #orbit-btn {
+      display: none;
+      position: fixed; bottom: 30px; right: 110px; z-index: 300;
+      width: 56px; height: 56px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.12);
+      border: 2px solid rgba(255,255,255,0.3);
+      color: #fff;
+      font-size: 0.65rem; font-weight: bold; letter-spacing: 1px;
+      cursor: grab;
+      touch-action: none;
+      align-items: center; justify-content: center;
+      -webkit-tap-highlight-color: transparent;
+      pointer-events: auto;
+      text-align: center; line-height: 1.2;
+    }
+    #orbit-btn:active { cursor: grabbing; background: rgba(255,255,255,0.25); }
+    #orbit-btn.show { display: flex; }
+    #mobile-esc-btn {
+      display: none;
+      position: fixed;
+      top: calc(env(safe-area-inset-top, 0px) + 18px);
+      right: calc(env(safe-area-inset-right, 0px) + 18px);
+      z-index: 320;
+      width: 52px;
+      height: 52px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,215,0,0.34);
+      background: rgba(8,12,28,0.68);
+      color: #fff;
+      font: 900 1.45rem/1 'Segoe UI', system-ui, sans-serif;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.34), inset 0 0 18px rgba(255,215,0,0.08);
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    #mobile-esc-btn.show { display: block; }
+    #mobile-esc-btn:active {
+      transform: scale(0.94);
+      background: rgba(255,215,0,0.24);
+      border-color: rgba(255,215,0,0.7);
+    }
+    #mobile-rotate-btn {
+      display: none;
+      position: fixed;
+      top: calc(env(safe-area-inset-top, 0px) + 18px);
+      right: calc(env(safe-area-inset-right, 0px) + 82px);
+      z-index: 320;
+      width: 52px;
+      height: 52px;
+      border-radius: 16px;
+      border: 1px solid rgba(102,232,255,0.36);
+      background: rgba(8,12,28,0.64);
+      color: #fff;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.34), inset 0 0 18px rgba(102,232,255,0.08);
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    #mobile-rotate-btn.show { display: flex; }
+    #mobile-rotate-btn:active {
+      transform: scale(0.94);
+      background: rgba(102,232,255,0.18);
+      border-color: rgba(102,232,255,0.72);
+    }
+    #mobile-rotate-btn .rotate-icon {
+      width: 28px;
+      height: 28px;
+      transition: transform 0.18s ease, opacity 0.18s ease;
+      filter: drop-shadow(0 3px 7px rgba(0,0,0,0.38));
+    }
+    body[data-mobile-layout="landscape"] #mobile-rotate-btn .rotate-icon {
+      transform: rotate(90deg);
+    }
+    #mobile-rotate-btn .rotate-mode {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 5px;
+      text-align: center;
+      font: 800 9px/1 'Segoe UI', system-ui, sans-serif;
+      letter-spacing: 1px;
+      color: rgba(255,255,255,0.72);
+      pointer-events: none;
+    }
+    @media (pointer: coarse), (max-width: 900px) {
+      .panel-close-under-esc {
+        position: fixed !important;
+        top: calc(env(safe-area-inset-top, 0px) + 82px) !important;
+        right: calc(env(safe-area-inset-right, 0px) + 18px) !important;
+        z-index: 340 !important;
+        margin-left: 0 !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Canvas (always behind UI) -->
+  <canvas id="game-canvas"></canvas>
+  <button id="mobile-rotate-btn" type="button" aria-label="切换横竖屏">
+    <svg class="rotate-icon" viewBox="0 0 64 64" aria-hidden="true" fill="none">
+      <rect x="20" y="10" width="24" height="44" rx="6" stroke="rgba(255,255,255,0.86)" stroke-width="4"/>
+      <path d="M28 47h8" stroke="rgba(255,255,255,0.72)" stroke-width="4" stroke-linecap="round"/>
+      <path d="M48 17c5 4 8 10 8 17 0 8-4 15-10 19" stroke="#66e8ff" stroke-width="4" stroke-linecap="round"/>
+      <path d="M46 17h10V7" stroke="#66e8ff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M16 47c-5-4-8-10-8-17 0-8 4-15 10-19" stroke="#ffd166" stroke-width="4" stroke-linecap="round"/>
+      <path d="M18 47H8v10" stroke="#ffd166" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span class="rotate-mode">自动</span>
+  </button>
+  <button id="mobile-esc-btn" type="button" aria-label="打开菜单"><span aria-hidden="true">☰</span></button>
+
+  <!-- ==================== LOADING SCREEN ==================== -->
+  <div id="loading-screen" class="overlay show" style="flex-direction:column;align-items:center;justify-content:center;">
+    <div id="loading-logo">STREET RACER</div>
+    <div id="loading-bar-bg">
+      <div id="loading-bar-fill"></div>
+    </div>
+    <div id="loading-percent">0%</div>
+  </div>
+
+  <!-- ==================== AUDIO UNLOCK ==================== -->
+  <div id="audio-unlock" class="overlay" style="flex-direction:column;align-items:center;justify-content:center;">
+    <button id="audio-unlock-btn">开始引擎</button>
+    <p>解锁音频播放</p>
+  </div>
+
+  <!-- ==================== MAIN MENU ==================== -->
+  <div id="main-menu" class="overlay">
+    <div class="menu-header">
+      <span style="color:#ffd700" id="menu-level">LV.1</span>
+      <span style="color:#f39c12" id="menu-credits">0 CR</span>
+      <span style="color:#3498db" id="menu-pp">0 PP</span>
+    </div>
+    <div class="menu-title">STREET RACER</div>
+    <div class="menu-subtitle">UNDERGROUND PURSUIT</div>
+    <div class="menu-grid">
+      <button class="menu-btn" onclick="window.GameActions.profile()">
+        <span class="icon">👤</span>
+        <span class="label" style="color:#ffd166">角色信息</span>
+      </button>
+      <button class="menu-btn" onclick="window.GameActions.garage()">
+        <span class="icon">🏎</span>
+        <span class="label" style="color:#3498db">车库</span>
+      </button>
+      <button class="menu-btn" onclick="window.GameActions.freeDrive()">
+        <span class="icon">🛣</span>
+        <span class="label" style="color:#2ecc71">自由试驾</span>
+      </button>
+      <button class="menu-btn" onclick="window.GameActions.raceEvent()">
+        <span class="icon">🏁</span>
+        <span class="label" style="color:#e74c3c">单人赛事</span>
+      </button>
+      <button class="menu-btn" onclick="window.GameActions.pursuit()">
+        <span class="icon">🚔</span>
+        <span class="label" style="color:#ff6600">街头追逃</span>
+      </button>
+      <button class="menu-btn" onclick="window.GameActions.dailyChallenge()">
+        <span class="icon">⏱</span>
+        <span class="label" style="color:#9b59b6">每日挑战</span>
+      </button>
+      <button class="menu-btn" onclick="window.GameActions.trackSelect()">
+        <span class="icon">🗺</span>
+        <span class="label" style="color:#ffd700">选择赛道</span>
+      </button>
+      <button class="menu-btn" onclick="window.GameActions.settings()">
+        <span class="icon">⚙</span>
+        <span class="label" style="color:#95a5a6">游戏设置</span>
+      </button>
+      <button class="menu-btn" onclick="window.GameActions.multiplayer()">
+        <span class="icon">🌐</span>
+        <span class="label" style="color:#1abc9c">多人联机</span>
+      </button>
+      <button class="menu-btn" onclick="window.GameActions.levelEditor()">
+        <span class="icon">🧱</span>
+        <span class="label" style="color:#78f0c2">关卡编辑</span>
+      </button>
+      <button class="menu-btn" onclick="window.GameActions.assetChecker()">
+        <span class="icon">✓</span>
+        <span class="label" style="color:#f1c40f">资源检查</span>
+      </button>
+    </div>
+    <div class="weather-panel" aria-label="Weather controls">
+      <div class="weather-title">WEATHER<span id="weather-current-label">NOON</span></div>
+      <button class="weather-btn" type="button" data-weather-option="clear_morning" onclick="window.GameActions.setWeather('clear_morning')">MORNING</button>
+      <button class="weather-btn" type="button" data-weather-option="clear_noon" onclick="window.GameActions.setWeather('clear_noon')">NOON</button>
+      <button class="weather-btn" type="button" data-weather-option="clear_evening" onclick="window.GameActions.setWeather('clear_evening')">EVENING</button>
+      <button class="weather-btn" type="button" data-weather-option="rain" onclick="window.GameActions.setWeather('rain')">RAIN</button>
+      <button class="weather-btn" type="button" data-weather-option="snow" onclick="window.GameActions.setWeather('snow')">SNOW</button>
+      <button class="weather-btn" type="button" onclick="window.GameActions.cycleWeather()">NEXT</button>
+    </div>
+    <div class="menu-hint">选择一个模式</div>
+    <div class="menu-footer">v1.0 — Single Player Edition</div>
+  </div>
+
+  <div id="track-select-dialog" role="dialog" aria-modal="true" aria-label="Select Track">
+    <div class="track-panel">
+      <div class="track-title">
+        <span>SELECT TRACK</span>
+        <button class="track-close" type="button" onclick="window.GameActions.closeTrackSelect()">x</button>
+      </div>
+      <div id="track-select-list" class="track-list"></div>
+    </div>
+  </div>
+
+  <!-- ==================== ROTATE HINT ==================== -->
+  <div id="rotate-hint">
+    <div class="icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="5" y="2" width="14" height="20" rx="3" />
+        <path d="M12 18h.01" />
+      </svg>
+    </div>
+    <p>请旋转屏幕至横屏</p>
+  </div>
+
+  <!-- ==================== FATAL ERROR ==================== -->
+  <div id="fatal-error" class="overlay">
+    <div class="err-icon">!</div>
+    <div class="err-title">Something went wrong</div>
+    <div class="err-msg" id="fatal-error-msg"></div>
+    <button onclick="location.reload()">RELOAD GAME</button>
+  </div>
+
+  <script>
+    window.__streetRacerBootStarted = false;
+    setTimeout(() => {
+      const loading = document.getElementById('loading-screen');
+      const percent = document.getElementById('loading-percent');
+      const fatal = document.getElementById('fatal-error');
+      const fatalMsg = document.getElementById('fatal-error-msg');
+      const stillAtZero = percent && percent.textContent.trim() === '0%';
+      if (!window.__streetRacerBootStarted && loading && stillAtZero) {
+        loading.classList.add('hidden');
+        loading.style.display = 'none';
+        if (fatal) fatal.style.display = 'flex';
+        if (fatalMsg) {
+          fatalMsg.textContent = location.protocol === 'file:'
+            ? '请通过本地开发服务器打开游戏，例如 http://127.0.0.1:3003/，不要直接双击 HTML 文件。'
+            : '游戏入口脚本没有启动，请刷新页面或查看浏览器控制台错误。';
+        }
+      }
+    }, 7000);
+  </script>
+  <!-- ==================== ORBIT BUTTON ==================== -->
+  <div id="orbit-btn">360</div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
+

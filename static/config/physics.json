@@ -1,0 +1,21 @@
+{
+  "gravity": -9.82,
+  "timeStep": 0.016,
+  "maxSubSteps": 3,
+  "fixedTimeStep": 0.005,
+  "collisionMargin": 0.05,
+  "world": {
+    "broadphase": "dynamicAabbTree",
+    "solverIterations": 10
+  },
+  "ground": {
+    "friction": 0.9,
+    "restitution": 0.1
+  },
+  "roadSurface": {
+    "asphalt": { "friction": 0.9, "rollingResistance": 0.015 },
+    "dirt": { "friction": 0.6, "rollingResistance": 0.035 },
+    "grass": { "friction": 0.4, "rollingResistance": 0.06 },
+    "sand": { "friction": 0.3, "rollingResistance": 0.1 }
+  }
+}

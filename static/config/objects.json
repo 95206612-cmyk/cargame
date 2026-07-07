@@ -1,0 +1,57 @@
+{
+  "objects": [
+    {
+      "id": "soft_cone",
+      "label": "软质交通锥",
+      "category": "breakable",
+      "baseType": "traffic_cone",
+      "mass": 5,
+      "durability": 12,
+      "collisionRadius": 0.75,
+      "breakable": true,
+      "snapToGround": true,
+      "color": "#ff9d2e",
+      "debrisColor": "#ffc857"
+    },
+    {
+      "id": "heavy_barrel",
+      "label": "重型防撞桶",
+      "category": "breakable",
+      "baseType": "barrel",
+      "mass": 42,
+      "durability": 68,
+      "collisionRadius": 1.12,
+      "breakable": true,
+      "snapToGround": true,
+      "color": "#d83b36",
+      "debrisColor": "#ffcf6a"
+    },
+    {
+      "id": "short_barrier",
+      "label": "短护栏",
+      "category": "solid",
+      "baseType": "road_barrier",
+      "mass": 95,
+      "durability": 130,
+      "collisionRadius": 1.45,
+      "breakable": false,
+      "snapToGround": true,
+      "color": "#dfe8ef",
+      "debrisColor": "#c7d2db"
+    },
+    {
+      "id": "nitro_pad",
+      "label": "氮气加速板",
+      "category": "function",
+      "baseType": "boost_pad",
+      "mass": 0,
+      "durability": 999,
+      "collisionRadius": 1.9,
+      "breakable": false,
+      "snapToGround": true,
+      "effect": "boost",
+      "color": "#32ffb0",
+      "debrisColor": "#32ffb0"
+    }
+  ]
+}

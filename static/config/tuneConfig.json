@@ -1,0 +1,98 @@
+{
+  "categories": {
+    "engine": {
+      "name": "引擎升级",
+      "description": "提升发动机输出功率，提高加速性能和极速",
+      "icon": "engine",
+      "levels": [
+        { "level": 0, "name": "原厂",     "cost": 0,     "engineForceMult": 1.00, "maxSpeedMult": 1.00 },
+        { "level": 1, "name": "进气道",   "cost": 800,   "engineForceMult": 1.08, "maxSpeedMult": 1.02 },
+        { "level": 2, "name": "运动排气", "cost": 2000,  "engineForceMult": 1.16, "maxSpeedMult": 1.04 },
+        { "level": 3, "name": "高角度凸轮", "cost": 4500, "engineForceMult": 1.25, "maxSpeedMult": 1.07 },
+        { "level": 4, "name": "锻造活塞", "cost": 9000,  "engineForceMult": 1.35, "maxSpeedMult": 1.10 },
+        { "level": 5, "name": "全锻造套件", "cost": 18000, "engineForceMult": 1.50, "maxSpeedMult": 1.15 }
+      ]
+    },
+    "turbo": {
+      "name": "涡轮增压",
+      "description": "提升氮气爆发动力，氮气加速更猛",
+      "icon": "turbo",
+      "levels": [
+        { "level": 0, "name": "自然吸气",   "cost": 0,     "nitroBoostMult": 1.00, "nitroMaxSpeedMult": 1.00 },
+        { "level": 1, "name": "小涡轮",      "cost": 1200,  "nitroBoostMult": 1.12, "nitroMaxSpeedMult": 1.03 },
+        { "level": 2, "name": "中冷涡轮",    "cost": 3000,  "nitroBoostMult": 1.25, "nitroMaxSpeedMult": 1.06 },
+        { "level": 3, "name": "大涡轮",      "cost": 6500,  "nitroBoostMult": 1.40, "nitroMaxSpeedMult": 1.10 },
+        { "level": 4, "name": "双涡轮",      "cost": 12000, "nitroBoostMult": 1.60, "nitroMaxSpeedMult": 1.15 },
+        { "level": 5, "name": "赛用双涡轮",  "cost": 22000, "nitroBoostMult": 1.85, "nitroMaxSpeedMult": 1.22 }
+      ]
+    },
+    "suspension": {
+      "name": "悬挂系统",
+      "description": "提升过弯稳定性，降低车身侧倾，改善操控响应",
+      "icon": "suspension",
+      "levels": [
+        { "level": 0, "name": "原厂悬挂",   "cost": 0,     "steeringMult": 1.00, "suspStiffMult": 1.00, "rollInfluenceMult": 1.00 },
+        { "level": 1, "name": "运动短弹簧", "cost": 600,   "steeringMult": 1.06, "suspStiffMult": 1.10, "rollInfluenceMult": 0.88 },
+        { "level": 2, "name": "运动减震器", "cost": 1500,  "steeringMult": 1.12, "suspStiffMult": 1.22, "rollInfluenceMult": 0.76 },
+        { "level": 3, "name": "绞牙避震",   "cost": 3500,  "steeringMult": 1.18, "suspStiffMult": 1.36, "rollInfluenceMult": 0.64 },
+        { "level": 4, "name": "全段可调",   "cost": 7000,  "steeringMult": 1.25, "suspStiffMult": 1.52, "rollInfluenceMult": 0.52 },
+        { "level": 5, "name": "赛用悬挂",   "cost": 14000, "steeringMult": 1.35, "suspStiffMult": 1.70, "rollInfluenceMult": 0.40 }
+      ]
+    },
+    "tires": {
+      "name": "运动轮胎",
+      "description": "提升干燥路面抓地力，缩短刹车距离",
+      "icon": "tires",
+      "levels": [
+        { "level": 0, "name": "街胎",       "cost": 0,     "frictionMult": 1.00, "brakeForceMult": 1.00 },
+        { "level": 1, "name": "性能街胎",   "cost": 500,   "frictionMult": 1.08, "brakeForceMult": 1.05 },
+        { "level": 2, "name": "运动胎",      "cost": 1200,  "frictionMult": 1.16, "brakeForceMult": 1.10 },
+        { "level": 3, "name": "半热熔胎",   "cost": 2800,  "frictionMult": 1.26, "brakeForceMult": 1.16 },
+        { "level": 4, "name": "热熔胎",      "cost": 5500,  "frictionMult": 1.36, "brakeForceMult": 1.22 },
+        { "level": 5, "name": "赛用热熔胎", "cost": 11000, "frictionMult": 1.50, "brakeForceMult": 1.30 }
+      ]
+    },
+    "brakes": {
+      "name": "高性能刹车",
+      "description": "缩短刹车滑行距离，提升制动稳定性",
+      "icon": "brakes",
+      "levels": [
+        { "level": 0, "name": "原厂刹车",   "cost": 0,     "brakeForceMult": 1.00, "brakeStabilityMult": 1.00 },
+        { "level": 1, "name": "陶瓷刹车片", "cost": 400,   "brakeForceMult": 1.10, "brakeStabilityMult": 1.05 },
+        { "level": 2, "name": "划线刹车盘", "cost": 1000,  "brakeForceMult": 1.20, "brakeStabilityMult": 1.10 },
+        { "level": 3, "name": "四活塞卡钳", "cost": 2400,  "brakeForceMult": 1.32, "brakeStabilityMult": 1.18 },
+        { "level": 4, "name": "六活塞卡钳", "cost": 5000,  "brakeForceMult": 1.44, "brakeStabilityMult": 1.26 },
+        { "level": 5, "name": "赛用碳陶瓷", "cost": 10000, "brakeForceMult": 1.60, "brakeStabilityMult": 1.35 }
+      ]
+    },
+    "nitroKit": {
+      "name": "氮气套件",
+      "description": "提升氮气容量和回复速度",
+      "icon": "nitro",
+      "levels": [
+        { "level": 0, "name": "原厂氮气",   "cost": 0,     "nitroCapMult": 1.00, "nitroRefillMult": 1.00 },
+        { "level": 1, "name": "加大喷嘴",   "cost": 1000,  "nitroCapMult": 1.12, "nitroRefillMult": 1.10 },
+        { "level": 2, "name": "高压瓶阀",   "cost": 2500,  "nitroCapMult": 1.25, "nitroRefillMult": 1.22 },
+        { "level": 3, "name": "双瓶并联",   "cost": 5000,  "nitroCapMult": 1.40, "nitroRefillMult": 1.36 },
+        { "level": 4, "name": "大容量瓶组", "cost": 9000,  "nitroCapMult": 1.60, "nitroRefillMult": 1.52 },
+        { "level": 5, "name": "赛用连续喷射", "cost": 16000, "nitroCapMult": 1.85, "nitroRefillMult": 1.70 }
+      ]
+    }
+  },
+  "playerLevels": [
+    { "level": 1, "xpRequired": 0 },
+    { "level": 2, "xpRequired": 500 },
+    { "level": 3, "xpRequired": 1500 },
+    { "level": 4, "xpRequired": 3500 },
+    { "level": 5, "xpRequired": 7000 },
+    { "level": 6, "xpRequired": 12000 },
+    { "level": 7, "xpRequired": 20000 },
+    { "level": 8, "xpRequired": 30000 }
+  ],
+  "creditsPerRace": {
+    "1st": 800,
+    "2nd": 500,
+    "3rd": 300,
+    "participation": 150
+  }
+}

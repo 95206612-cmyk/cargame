@@ -1,0 +1,60 @@
+{
+  "day": {
+    "lighting": {
+      "ambient": { "color": "#406080", "intensity": 0.6 },
+      "hemisphere": { "sky": "#87ceeb", "ground": "#362907", "intensity": 0.4 },
+      "sun": { "color": "#fff5e6", "intensity": 1.5 },
+      "sunPosition": [50, 80, 30]
+    },
+    "background": "#87ceeb",
+    "fog": { "color": "#87ceeb", "near": 200, "far": 1000 },
+    "toneMappingExposure": 1.0,
+    "streetLights": false,
+    "headlightsNeeded": false,
+    "skybox": "day-clear"
+  },
+  "dusk": {
+    "lighting": {
+      "ambient": { "color": "#604040", "intensity": 0.4 },
+      "hemisphere": { "sky": "#ff8844", "ground": "#221100", "intensity": 0.5 },
+      "sun": { "color": "#ff9944", "intensity": 1.0 },
+      "sunPosition": [50, 15, -80]
+    },
+    "background": "#ff8844",
+    "fog": { "color": "#ff8844", "near": 150, "far": 600 },
+    "toneMappingExposure": 0.8,
+    "streetLights": true,
+    "headlightsNeeded": false,
+    "skybox": "sunset"
+  },
+  "night": {
+    "lighting": {
+      "ambient": { "color": "#102040", "intensity": 0.25 },
+      "hemisphere": { "sky": "#0a0a20", "ground": "#050510", "intensity": 0.15 },
+      "sun": { "color": "#334477", "intensity": 0.3 },
+      "sunPosition": [30, 60, 50]
+    },
+    "background": "#0a0a20",
+    "fog": { "color": "#0a0a20", "near": 50, "far": 300 },
+    "toneMappingExposure": 0.6,
+    "streetLights": true,
+    "headlightsNeeded": true,
+    "skybox": "night-stars"
+  },
+  "weathers": {
+    "clear": {
+      "rainEnabled": false,
+      "fogEnabled": false,
+      "fogDensity": 0.0003,
+      "frictionMultiplier": 1.0,
+      "wetRoadOpacity": 0
+    },
+    "rain": {
+      "rainEnabled": true,
+      "fogEnabled": true,
+      "fogDensity": 0.0015,
+      "frictionMultiplier": 0.7,
+      "wetRoadOpacity": 0.35
+    }
+  }
+}

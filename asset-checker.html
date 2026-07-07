@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Street Racer Asset Checker</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Inter, "Segoe UI", Arial, sans-serif;
+        background: #eef2f4;
+        color: #182024;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+      }
+
+      .shell {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+
+      header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 18px;
+        margin-bottom: 18px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: 28px;
+        line-height: 1.1;
+      }
+
+      .subtle {
+        color: #5c6a70;
+        line-height: 1.5;
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .segmented {
+        display: inline-flex;
+        padding: 4px;
+        background: #dbe3e7;
+        border-radius: 8px;
+        gap: 4px;
+      }
+
+      button,
+      label.file-button {
+        border: 0;
+        border-radius: 6px;
+        padding: 10px 14px;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+        color: #172023;
+        background: #ffffff;
+        box-shadow: inset 0 0 0 1px #c5d0d6;
+      }
+
+      button.active {
+        color: #ffffff;
+        background: #12645a;
+        box-shadow: none;
+      }
+
+      button.primary,
+      label.file-button {
+        color: #ffffff;
+        background: #c6422b;
+        box-shadow: none;
+      }
+
+      input[type="file"] {
+        display: none;
+      }
+
+      .drop-zone {
+        display: grid;
+        place-items: center;
+        min-height: 170px;
+        padding: 28px;
+        margin-bottom: 18px;
+        text-align: center;
+        border: 2px dashed #8fa0a8;
+        border-radius: 8px;
+        background: #ffffff;
+        transition: border-color 0.18s ease, background 0.18s ease;
+      }
+
+      .drop-zone.dragging {
+        border-color: #12645a;
+        background: #e7f4ef;
+      }
+
+      .drop-zone strong {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 20px;
+      }
+
+      .dashboard {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin-bottom: 18px;
+      }
+
+      .metric,
+      .panel,
+      .issue,
+      .file-row {
+        background: #ffffff;
+        border: 1px solid #d5dee2;
+        border-radius: 8px;
+      }
+
+      .metric {
+        padding: 14px;
+      }
+
+      .metric span {
+        display: block;
+        margin-bottom: 8px;
+        color: #607078;
+        font-size: 13px;
+      }
+
+      .metric strong {
+        font-size: 24px;
+      }
+
+      .main-grid {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 18px;
+      }
+
+      .panel {
+        min-width: 0;
+        overflow: hidden;
+      }
+
+      .panel-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 16px;
+        border-bottom: 1px solid #d5dee2;
+      }
+
+      .panel-body {
+        padding: 14px;
+      }
+
+      .issue-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .issue {
+        display: grid;
+        grid-template-columns: 82px 1fr;
+        gap: 12px;
+        padding: 12px;
+      }
+
+      .badge {
+        align-self: start;
+        display: inline-flex;
+        justify-content: center;
+        min-width: 74px;
+        padding: 5px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .badge.error {
+        color: #ffffff;
+        background: #bd2d22;
+      }
+
+      .badge.warn {
+        color: #30220b;
+        background: #f5ba42;
+      }
+
+      .badge.pass {
+        color: #ffffff;
+        background: #16805e;
+      }
+
+      .badge.info {
+        color: #ffffff;
+        background: #426579;
+      }
+
+      .issue h3 {
+        margin-bottom: 4px;
+        font-size: 15px;
+      }
+
+      .issue p {
+        color: #516169;
+        line-height: 1.45;
+      }
+
+      .file-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .file-row {
+        padding: 12px;
+      }
+
+      .file-row strong {
+        display: block;
+        margin-bottom: 6px;
+        overflow-wrap: anywhere;
+      }
+
+      .kv {
+        display: grid;
+        grid-template-columns: 140px 1fr;
+        gap: 8px 14px;
+        color: #52636b;
+        font-size: 14px;
+      }
+
+      .kv b {
+        color: #1d282d;
+      }
+
+      .empty {
+        color: #607078;
+        padding: 22px;
+        text-align: center;
+      }
+
+      canvas.preview {
+        width: 100%;
+        height: 320px;
+        display: block;
+        background: #d7e0e4;
+      }
+
+      @media (max-width: 900px) {
+        header,
+        .main-grid {
+          grid-template-columns: 1fr;
+          display: grid;
+        }
+
+        .dashboard {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 560px) {
+        .shell {
+          padding: 14px;
+        }
+
+        .dashboard {
+          grid-template-columns: 1fr;
+        }
+
+        .issue,
+        .kv {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <header>
+        <div>
+          <h1>资源检查工具</h1>
+          <p class="subtle">检查车辆、赛道、贴图、碰撞与导航命名是否符合 Street Racer 导入规范。</p>
+        </div>
+        <div class="toolbar">
+          <div class="segmented" aria-label="检查类型">
+            <button class="active" data-kind="car">车辆</button>
+            <button data-kind="track">赛道</button>
+            <button data-kind="texture">贴图</button>
+          </div>
+          <label class="file-button" for="asset-input">选择资源</label>
+          <input id="asset-input" type="file" multiple accept=".glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.json" />
+          <button id="game-button">返回游戏</button>
+          <button id="clear-button">清空</button>
+        </div>
+      </header>
+
+      <section id="drop-zone" class="drop-zone">
+        <div>
+          <strong>拖入 .glb/.gltf、贴图或配置 JSON</strong>
+          <p class="subtle">车辆建议包含 body、wheel_fl、wheel_fr、wheel_rl、wheel_rr；赛道建议包含 road、barriers、checkpoints、spawn_points、route/ai_path。</p>
+        </div>
+      </section>
+
+      <section class="dashboard" aria-label="检查概览">
+        <div class="metric"><span>错误</span><strong id="count-error">0</strong></div>
+        <div class="metric"><span>警告</span><strong id="count-warn">0</strong></div>
+        <div class="metric"><span>通过</span><strong id="count-pass">0</strong></div>
+        <div class="metric"><span>已读文件</span><strong id="count-files">0</strong></div>
+      </section>
+
+      <section class="main-grid">
+        <div class="panel">
+          <div class="panel-head">
+            <h2>检查结果</h2>
+            <button id="export-button" class="primary">导出报告</button>
+          </div>
+          <div class="panel-body">
+            <div id="issue-list" class="issue-list">
+              <div class="empty">还没有导入资源。</div>
+            </div>
+          </div>
+        </div>
+
+        <aside class="panel">
+          <div class="panel-head">
+            <h2>资源详情</h2>
+          </div>
+          <canvas id="preview" class="preview"></canvas>
+          <div class="panel-body">
+            <div id="file-list" class="file-list">
+              <div class="empty">模型导入后会显示尺寸、面数、节点和材质信息。</div>
+            </div>
+          </div>
+        </aside>
+      </section>
+    </main>
+    <script type="module" src="/src/tools/AssetChecker.js"></script>
+  </body>
+</html>
