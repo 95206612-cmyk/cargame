@@ -379,6 +379,18 @@ class App {
       registeredRoadBodies++;
     }
 
+    const terrainMeshes = this.interactiveObjects?.getTerrainPhysicsMeshes?.() || [];
+    let registeredTerrainBodies = 0;
+    for (const mesh of terrainMeshes) {
+      const body = this.physicsWorld.addTrimeshFromThreeMesh?.(mesh, {
+        source: 'editor-terrain-trimesh',
+        maxTriangles: 90000,
+      });
+      if (!body) continue;
+      this._trackPhysicsBodies.push(body);
+      registeredTerrainBodies++;
+    }
+
     const barrierColliders = this.trackManager?.getBarrierColliders?.() || [];
     let registeredTrackBodies = 0;
     for (const bc of barrierColliders) {
@@ -393,6 +405,7 @@ class App {
       registeredTrackBodies++;
     }
     console.log('[App] Track physics:', registeredRoadBodies, 'road trimesh bodies,',
+      registeredTerrainBodies, 'editor terrain bodies,',
       registeredTrackBodies, 'rigid colliders added,',
       barrierColliders.length, 'logic colliders');
   }

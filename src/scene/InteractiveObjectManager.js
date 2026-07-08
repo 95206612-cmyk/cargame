@@ -47,6 +47,21 @@ const ROAD_DEFAULTS = {
 
 const ROAD_GENERATION_MODES = new Set(['strip', 'module', 'deformModule']);
 
+const TERRAIN_DEFAULTS = {
+  width: 160,
+  depth: 160,
+  segmentsX: 32,
+  segmentsZ: 32,
+  baseHeight: -0.04,
+  color: 0x52724a,
+  roughness: 0.96,
+  metalness: 0,
+  generateCollision: true,
+  visible: true,
+  layer: 'default',
+  note: '',
+};
+
 const DEFAULT_ROAD_MODULES = {
   asphalt_straight: {
     id: 'asphalt_straight',
@@ -172,6 +187,42 @@ export const INTERACTIVE_OBJECT_TYPES = {
     effect: 'boost',
     debrisColor: 0x2cff9a,
   },
+  roadside_building: {
+    label: '路边建筑',
+    category: 'decorative',
+    baseType: 'roadside_building',
+    color: 0x6f7f8f,
+    mass: 0,
+    durability: 999,
+    collisionRadius: 5.2,
+    breakable: false,
+    snapToGround: true,
+    debrisColor: 0x8fa0aa,
+  },
+  tree_cluster: {
+    label: '树丛装饰',
+    category: 'decorative',
+    baseType: 'tree_cluster',
+    color: 0x3f7d3f,
+    mass: 22,
+    durability: 48,
+    collisionRadius: 2.1,
+    breakable: true,
+    snapToGround: true,
+    debrisColor: 0x4f8d43,
+  },
+  lamp_post: {
+    label: '路灯',
+    category: 'solid',
+    baseType: 'lamp_post',
+    color: 0xd7dde5,
+    mass: 80,
+    durability: 120,
+    collisionRadius: 0.75,
+    breakable: false,
+    snapToGround: true,
+    debrisColor: 0xb9c2c9,
+  },
 };
 
 function clamp(value, min, max, fallback) {
@@ -215,11 +266,15 @@ export class InteractiveObjectManager {
 
     this.objects = [];
     this.roads = [];
+    this.terrains = [];
     this.roadGroup = new THREE.Group();
     this.roadGroup.name = 'editor-spline-roads';
+    this.terrainGroup = new THREE.Group();
+    this.terrainGroup.name = 'editor-terrains';
     this.currentTrackId = 'city_circuit';
     this._idCounter = 1;
     this._roadIdCounter = 1;
+    this._terrainIdCounter = 1;
     this._hitCooldown = new Map();
     this._objectTypes = { ...INTERACTIVE_OBJECT_TYPES };
     this._roadModules = { ...DEFAULT_ROAD_MODULES };
@@ -227,11 +282,13 @@ export class InteractiveObjectManager {
     this._roadModuleLoads = new Map();
     this._storage = this._loadStorage();
     this._attachRoadGroup();
+    this._attachTerrainGroup();
   }
 
   setTrackManager(trackManager) {
     this.trackManager = trackManager;
     this._attachRoadGroup();
+    this._attachTerrainGroup();
     this._syncEditorRoadProfiles();
   }
 
@@ -242,14 +299,17 @@ export class InteractiveObjectManager {
   loadTrack(trackId = 'city_circuit') {
     this.currentTrackId = String(trackId || 'city_circuit').replace(/-/g, '_');
     this._attachRoadGroup();
+    this._attachTerrainGroup();
     this._storage = this._loadStorage();
     this.clear();
     const saved = this._storage.tracks?.[this.currentTrackId];
     const state = this._normalizeTrackEntry(saved);
-    for (const data of state.objects) this.addObject(data, { save: false, preserveId: true });
+    for (const data of state.terrains) this.addTerrain(data, { save: false, preserveId: true });
     for (const data of state.roads) this.addRoad(data, { save: false, preserveId: true });
+    for (const data of state.objects) this.addObject(data, { save: false, preserveId: true });
     this._idCounter = this.objects.length + 1;
     this._roadIdCounter = this.roads.length + 1;
+    this._terrainIdCounter = this.terrains.length + 1;
     this._syncEditorRoadProfiles();
   }
 
@@ -257,6 +317,7 @@ export class InteractiveObjectManager {
     for (const obj of this.objects) this._disposeObject(obj);
     this.objects = [];
     this.clearRoads();
+    this.clearTerrains();
     this._hitCooldown.clear();
   }
 
@@ -265,6 +326,13 @@ export class InteractiveObjectManager {
     this.roads = [];
     this._roadIdCounter = 1;
     this._syncEditorRoadProfiles();
+    this._invalidateTrackRoadCaches();
+  }
+
+  clearTerrains() {
+    for (const terrain of this.terrains) this._disposeTerrain(terrain);
+    this.terrains = [];
+    this._terrainIdCounter = 1;
     this._invalidateTrackRoadCaches();
   }
 
@@ -334,9 +402,10 @@ export class InteractiveObjectManager {
 
   getCurrentEditorState() {
     return {
-      version: 3,
+      version: 4,
       objects: this.getEditableObjects(),
       roads: this.getEditableRoads(),
+      terrains: this.getEditableTerrains(),
     };
   }
 
@@ -417,12 +486,39 @@ export class InteractiveObjectManager {
     return meshes;
   }
 
+  getTerrain(id) {
+    return this.terrains.find(terrain => terrain.id === id) || null;
+  }
+
+  getTerrains() {
+    return this.terrains;
+  }
+
+  getEditableTerrains() {
+    return this.terrains.map(terrain => this.serializeTerrain(terrain));
+  }
+
+  getTerrainMeshes() {
+    const meshes = [];
+    for (const terrain of this.terrains) {
+      if (terrain.mesh?.isMesh) meshes.push(terrain.mesh);
+    }
+    return meshes;
+  }
+
+  getTerrainPhysicsMeshes() {
+    return this.getTerrainMeshes().filter(mesh => mesh.userData?.editorTerrainCollision !== false);
+  }
+
   getMeshes() {
     const meshes = [];
     for (const obj of this.objects) {
       obj.mesh.traverse(child => {
         if (child.isMesh) meshes.push(child);
       });
+    }
+    for (const terrain of this.terrains) {
+      if (terrain.mesh?.isMesh) meshes.push(terrain.mesh);
     }
     return meshes;
   }
@@ -611,6 +707,112 @@ export class InteractiveObjectManager {
     return this.addRoad(copy, options);
   }
 
+  addTerrain(data = {}, options = {}) {
+    const terrain = this._normalizeTerrain(data, options.preserveId);
+    this.terrains.push(terrain);
+    this._rebuildTerrainMesh(terrain);
+    if (options.save !== false) this.saveCurrentTrack();
+    return terrain;
+  }
+
+  updateTerrain(id, patch = {}, options = {}) {
+    const terrain = this.getTerrain(id);
+    if (!terrain) return null;
+    if ('width' in patch) terrain.width = clamp(patch.width, 16, 1024, terrain.width);
+    if ('depth' in patch) terrain.depth = clamp(patch.depth, 16, 1024, terrain.depth);
+    if ('segmentsX' in patch || 'segmentsZ' in patch) {
+      const nextX = Math.round(clamp(patch.segmentsX ?? terrain.segmentsX, 4, 128, terrain.segmentsX));
+      const nextZ = Math.round(clamp(patch.segmentsZ ?? terrain.segmentsZ, 4, 128, terrain.segmentsZ));
+      if (nextX !== terrain.segmentsX || nextZ !== terrain.segmentsZ) this._resampleTerrainHeights(terrain, nextX, nextZ);
+    }
+    if ('position' in patch) terrain.position = cloneVectorLike(patch.position, terrain.position);
+    if ('baseHeight' in patch) {
+      const nextBase = clamp(patch.baseHeight, -50, 80, terrain.baseHeight);
+      const delta = nextBase - terrain.baseHeight;
+      terrain.baseHeight = nextBase;
+      terrain.heights = terrain.heights.map(height => height + delta);
+    }
+    if ('color' in patch) terrain.color = normalizeColor(patch.color, terrain.color);
+    if ('roughness' in patch) terrain.roughness = clamp(patch.roughness, 0, 1, terrain.roughness);
+    if ('metalness' in patch) terrain.metalness = clamp(patch.metalness, 0, 1, terrain.metalness);
+    if ('generateCollision' in patch) terrain.generateCollision = Boolean(patch.generateCollision);
+    if ('visible' in patch) terrain.visible = Boolean(patch.visible);
+    if ('layer' in patch) terrain.layer = patch.layer || 'default';
+    if ('note' in patch) terrain.note = String(patch.note || '');
+    if (Array.isArray(patch.heights)) {
+      const expected = (terrain.segmentsX + 1) * (terrain.segmentsZ + 1);
+      terrain.heights = patch.heights.slice(0, expected).map(value => clamp(value, -80, 120, terrain.baseHeight));
+      while (terrain.heights.length < expected) terrain.heights.push(terrain.baseHeight);
+    }
+    this._rebuildTerrainMesh(terrain);
+    if (options.save !== false) this.saveCurrentTrack();
+    return terrain;
+  }
+
+  removeTerrain(id, options = {}) {
+    const index = this.terrains.findIndex(terrain => terrain.id === id);
+    if (index < 0) return false;
+    const [terrain] = this.terrains.splice(index, 1);
+    this._disposeTerrain(terrain);
+    this._invalidateTrackRoadCaches();
+    if (options.save !== false) this.saveCurrentTrack();
+    return true;
+  }
+
+  paintTerrainAtPoint(id, worldPoint, brush = {}, options = {}) {
+    const terrain = this.getTerrain(id);
+    if (!terrain || !worldPoint) return null;
+    const radius = Math.max(0.5, Number(brush.radius) || 8);
+    const strength = Math.max(0, Number(brush.strength) || 0.35);
+    const mode = brush.mode || 'raise';
+    const targetHeight = Number.isFinite(Number(brush.targetHeight)) ? Number(brush.targetHeight) : terrain.baseHeight;
+    const localX = (worldPoint.x || 0) - (terrain.position.x || 0);
+    const localZ = (worldPoint.z || 0) - (terrain.position.z || 0);
+    const halfW = terrain.width * 0.5;
+    const halfD = terrain.depth * 0.5;
+    const stepX = terrain.width / Math.max(1, terrain.segmentsX);
+    const stepZ = terrain.depth / Math.max(1, terrain.segmentsZ);
+    const before = terrain.heights.slice();
+    const next = terrain.heights.slice();
+    const sampleAvg = (x, z) => {
+      let sum = 0;
+      let count = 0;
+      for (let dz = -1; dz <= 1; dz++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const sx = Math.max(0, Math.min(terrain.segmentsX, x + dx));
+          const sz = Math.max(0, Math.min(terrain.segmentsZ, z + dz));
+          sum += before[sz * (terrain.segmentsX + 1) + sx] ?? terrain.baseHeight;
+          count++;
+        }
+      }
+      return count ? sum / count : terrain.baseHeight;
+    };
+    let changed = false;
+    for (let z = 0; z <= terrain.segmentsZ; z++) {
+      const vz = -halfD + z * stepZ;
+      for (let x = 0; x <= terrain.segmentsX; x++) {
+        const vx = -halfW + x * stepX;
+        const dist = Math.hypot(vx - localX, vz - localZ);
+        if (dist > radius) continue;
+        const falloff = (1 - dist / radius) ** 1.65;
+        const idx = z * (terrain.segmentsX + 1) + x;
+        const current = before[idx] ?? terrain.baseHeight;
+        let value = current;
+        if (mode === 'lower') value = current - strength * falloff;
+        else if (mode === 'smooth') value = current + (sampleAvg(x, z) - current) * Math.min(1, strength * falloff);
+        else if (mode === 'flatten') value = current + (targetHeight - current) * Math.min(1, strength * falloff);
+        else value = current + strength * falloff;
+        next[idx] = clamp(value, -80, 120, current);
+        if (Math.abs(next[idx] - current) > 0.0001) changed = true;
+      }
+    }
+    if (!changed) return terrain;
+    terrain.heights = next;
+    this._rebuildTerrainMesh(terrain);
+    if (options.save !== false) this.saveCurrentTrack();
+    return terrain;
+  }
+
   replaceCurrentTrackLayout(layout = [], options = {}) {
     const normalized = this.normalizeTrackState(layout);
     if (!normalized.ok) {
@@ -618,21 +820,24 @@ export class InteractiveObjectManager {
     }
 
     this.clear();
-    for (const data of normalized.layout.objects) this.addObject(data, { save: false, preserveId: true });
+    for (const data of normalized.layout.terrains) this.addTerrain(data, { save: false, preserveId: true });
     for (const data of normalized.layout.roads) this.addRoad(data, { save: false, preserveId: true });
+    for (const data of normalized.layout.objects) this.addObject(data, { save: false, preserveId: true });
     this._idCounter = this.objects.length + 1;
     this._roadIdCounter = this.roads.length + 1;
+    this._terrainIdCounter = this.terrains.length + 1;
 
     if (options.save !== false) return this.saveCurrentTrack();
-    return { ok: true, trackId: this.currentTrackId || 'city_circuit', count: this.objects.length, roadCount: this.roads.length };
+    return { ok: true, trackId: this.currentTrackId || 'city_circuit', count: this.objects.length, roadCount: this.roads.length, terrainCount: this.terrains.length };
   }
 
   resetCurrentTrack(options = {}) {
     this.clear();
     this._idCounter = 1;
     this._roadIdCounter = 1;
+    this._terrainIdCounter = 1;
     if (options.save !== false) return this.saveCurrentTrack();
-    return { ok: true, trackId: this.currentTrackId || 'city_circuit', count: 0, roadCount: 0 };
+    return { ok: true, trackId: this.currentTrackId || 'city_circuit', count: 0, roadCount: 0, terrainCount: 0 };
   }
 
   normalizeImportPayload(payload) {
@@ -641,7 +846,7 @@ export class InteractiveObjectManager {
       return { ok: false, error: new Error('JSON 必须是数组，或包含 objects/layout/tracks 的对象。') };
     }
 
-    if (Array.isArray(payload.objects) || Array.isArray(payload.roads)) return this.normalizeTrackState(payload);
+    if (Array.isArray(payload.objects) || Array.isArray(payload.roads) || Array.isArray(payload.terrains)) return this.normalizeTrackState(payload);
     if (Array.isArray(payload.layout)) return this.normalizeTrackState(payload.layout);
     const trackId = String(payload.trackId || this.currentTrackId || 'city_circuit').replace(/-/g, '_');
     if (payload.tracks?.[trackId]) return this.normalizeTrackState(payload.tracks[trackId]);
@@ -654,12 +859,15 @@ export class InteractiveObjectManager {
     if (!objectResult.ok) return objectResult;
     const roadResult = this.normalizeRoadLayout(entry.roads);
     if (!roadResult.ok) return roadResult;
+    const terrainResult = this.normalizeTerrainLayout(entry.terrains);
+    if (!terrainResult.ok) return terrainResult;
     return {
       ok: true,
       layout: {
-        version: 3,
+        version: 4,
         objects: objectResult.layout,
         roads: roadResult.layout,
+        terrains: terrainResult.layout,
       },
     };
   }
@@ -704,17 +912,18 @@ export class InteractiveObjectManager {
       const trackId = this.currentTrackId || 'city_circuit';
       const layout = this.objects.map(obj => this.serializeObject(obj));
       const roads = this.getEditableRoads();
+      const terrains = this.getEditableTerrains();
       this._storage = this._loadStorage();
       this._storage.tracks = this._storage.tracks || {};
-      this._storage.tracks[trackId] = roads.length
-        ? { version: 3, objects: layout, roads }
+      this._storage.tracks[trackId] = (roads.length || terrains.length)
+        ? { version: 4, objects: layout, roads, terrains }
         : layout;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this._storage));
       this._storage = this._loadStorage();
-      return { ok: true, trackId, count: layout.length, roadCount: roads.length, storageKey: STORAGE_KEY };
+      return { ok: true, trackId, count: layout.length, roadCount: roads.length, terrainCount: terrains.length, storageKey: STORAGE_KEY };
     } catch (err) {
       console.warn('[InteractiveObjectManager] Save failed:', err);
-      return { ok: false, trackId: this.currentTrackId || 'city_circuit', count: this.objects.length, roadCount: this.roads.length, error: err };
+      return { ok: false, trackId: this.currentTrackId || 'city_circuit', count: this.objects.length, roadCount: this.roads.length, terrainCount: this.terrains.length, error: err };
     }
   }
 
@@ -761,6 +970,26 @@ export class InteractiveObjectManager {
       closed: road.closed,
       layer: road.layer || 'default',
       note: road.note || '',
+    };
+  }
+
+  serializeTerrain(terrain) {
+    return {
+      id: terrain.id,
+      width: terrain.width,
+      depth: terrain.depth,
+      segmentsX: terrain.segmentsX,
+      segmentsZ: terrain.segmentsZ,
+      position: { ...terrain.position },
+      baseHeight: terrain.baseHeight,
+      heights: terrain.heights.map(height => Number(height) || 0),
+      color: terrain.color,
+      roughness: terrain.roughness,
+      metalness: terrain.metalness,
+      generateCollision: terrain.generateCollision,
+      visible: terrain.visible,
+      layer: terrain.layer || 'default',
+      note: terrain.note || '',
     };
   }
 
@@ -865,8 +1094,9 @@ export class InteractiveObjectManager {
     const roadPoint = this.trackManager?.getRoadInfoAtPosition?.(p)?.point;
     if (roadPoint && Number.isFinite(roadPoint.y)) {
       p.y = roadPoint.y;
-    } else if (!Number.isFinite(p.y)) {
-      p.y = 0;
+    } else {
+      const terrainY = this._sampleTerrainHeightAt(p);
+      p.y = Number.isFinite(terrainY) ? terrainY : (Number.isFinite(p.y) ? p.y : 0);
     }
     return p;
   }
@@ -877,8 +1107,9 @@ export class InteractiveObjectManager {
     const roadPoint = this.trackManager?.getRoadInfoAtPosition?.(p, { preciseHeight: true })?.point;
     if (roadPoint && Number.isFinite(roadPoint.y)) {
       p.y = roadPoint.y + 0.035;
-    } else if (!Number.isFinite(p.y)) {
-      p.y = 0.035;
+    } else {
+      const terrainY = this._sampleTerrainHeightAt(p);
+      p.y = Number.isFinite(terrainY) ? terrainY + 0.035 : (Number.isFinite(p.y) ? p.y : 0.035);
     }
     return p;
   }
@@ -953,6 +1184,44 @@ export class InteractiveObjectManager {
       arrow.rotation.z = Math.PI / 2;
       arrow.position.y = 0.13;
       group.add(pad, arrow);
+    } else if (shapeType === 'roadside_building') {
+      const body = new THREE.Mesh(new THREE.BoxGeometry(6.5, 7.5, 5.4), mat);
+      body.position.y = 3.75;
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(7.1, 0.45, 5.9), new THREE.MeshStandardMaterial({ color: 0x2f3942, roughness: 0.82 }));
+      roof.position.y = 7.72;
+      const windowMat = new THREE.MeshStandardMaterial({ color: 0x9fd7ff, emissive: 0x102638, roughness: 0.35 });
+      for (let row = 0; row < 3; row++) {
+        for (let col = -1; col <= 1; col++) {
+          const win = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.54, 0.05), windowMat);
+          win.position.set(col * 1.45, 2.2 + row * 1.45, 2.73);
+          group.add(win);
+        }
+      }
+      group.add(body, roof);
+    } else if (shapeType === 'tree_cluster') {
+      const trunkMat = new THREE.MeshStandardMaterial({ color: 0x6a4328, roughness: 0.9 });
+      for (let i = 0; i < 4; i++) {
+        const angle = (i / 4) * Math.PI * 2;
+        const radius = i === 0 ? 0 : 0.78;
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, 1.4, 8), trunkMat);
+        trunk.position.set(Math.cos(angle) * radius, 0.7, Math.sin(angle) * radius);
+        const crown = new THREE.Mesh(new THREE.SphereGeometry(0.72 + (i % 2) * 0.18, 12, 8), mat);
+        crown.position.set(trunk.position.x, 1.72, trunk.position.z);
+        group.add(trunk, crown);
+      }
+    } else if (shapeType === 'lamp_post') {
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.11, 4.2, 12), dark);
+      pole.position.y = 2.1;
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.08, 0.08), dark);
+      arm.position.set(0.48, 4.02, 0);
+      const light = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 8), new THREE.MeshStandardMaterial({
+        color: 0xfff0b6,
+        emissive: 0xffcc66,
+        emissiveIntensity: 0.7,
+        roughness: 0.5,
+      }));
+      light.position.set(1.05, 3.92, 0);
+      group.add(pole, arm, light);
     }
 
     return group;
@@ -971,6 +1240,21 @@ export class InteractiveObjectManager {
       }
     }
     return { ok: true, layout: normalized.map(road => this.serializeRoad(road)) };
+  }
+
+  normalizeTerrainLayout(layout = []) {
+    if (!Array.isArray(layout)) {
+      return { ok: false, error: new Error('地形布局必须是数组。') };
+    }
+    const normalized = [];
+    for (let i = 0; i < layout.length; i++) {
+      try {
+        normalized.push(this._normalizeTerrain(layout[i], true));
+      } catch (err) {
+        return { ok: false, error: new Error(`第 ${i + 1} 个地形无效：${err.message}`) };
+      }
+    }
+    return { ok: true, layout: normalized.map(terrain => this.serializeTerrain(terrain)) };
   }
 
   _normalizeRoad(data = {}, preserveId = false) {
@@ -1001,6 +1285,161 @@ export class InteractiveObjectManager {
       note: String(data.note || ''),
       mesh: null,
     };
+  }
+
+  _normalizeTerrain(data = {}, preserveId = false) {
+    if (!data || typeof data !== 'object') throw new Error('地形数据必须是对象');
+    const segmentsX = Math.round(clamp(data.segmentsX, 4, 128, TERRAIN_DEFAULTS.segmentsX));
+    const segmentsZ = Math.round(clamp(data.segmentsZ, 4, 128, TERRAIN_DEFAULTS.segmentsZ));
+    const expected = (segmentsX + 1) * (segmentsZ + 1);
+    const baseHeight = clamp(data.baseHeight, -50, 80, TERRAIN_DEFAULTS.baseHeight);
+    const heights = Array.isArray(data.heights)
+      ? data.heights.slice(0, expected).map(value => clamp(value, -80, 120, baseHeight))
+      : [];
+    while (heights.length < expected) heights.push(baseHeight);
+    return {
+      id: preserveId && data.id ? String(data.id) : this._makeTerrainId(),
+      width: clamp(data.width, 16, 1024, TERRAIN_DEFAULTS.width),
+      depth: clamp(data.depth, 16, 1024, TERRAIN_DEFAULTS.depth),
+      segmentsX,
+      segmentsZ,
+      position: cloneVectorLike(data.position),
+      baseHeight,
+      heights,
+      color: normalizeColor(data.color, TERRAIN_DEFAULTS.color),
+      roughness: clamp(data.roughness, 0, 1, TERRAIN_DEFAULTS.roughness),
+      metalness: clamp(data.metalness, 0, 1, TERRAIN_DEFAULTS.metalness),
+      generateCollision: data.generateCollision ?? TERRAIN_DEFAULTS.generateCollision,
+      visible: data.visible !== false,
+      layer: data.layer || TERRAIN_DEFAULTS.layer,
+      note: String(data.note || ''),
+      mesh: null,
+    };
+  }
+
+  _rebuildTerrainMesh(terrain) {
+    if (!terrain) return;
+    if (terrain.mesh) this._disposeMesh(terrain.mesh);
+    this._attachTerrainGroup();
+    const geometry = this._buildTerrainGeometry(terrain);
+    const material = new THREE.MeshStandardMaterial({
+      color: terrain.color,
+      roughness: terrain.roughness,
+      metalness: terrain.metalness,
+      side: THREE.DoubleSide,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = `editor-terrain-${terrain.id}`;
+    mesh.position.set(terrain.position.x, terrain.position.y, terrain.position.z);
+    mesh.visible = terrain.visible !== false;
+    mesh.receiveShadow = true;
+    mesh.castShadow = false;
+    mesh.userData.editorTerrain = true;
+    mesh.userData.editorTerrainId = terrain.id;
+    mesh.userData.editorTerrainCollision = terrain.generateCollision !== false;
+    this.terrainGroup.add(mesh);
+    terrain.mesh = mesh;
+    this._invalidateTrackRoadCaches();
+  }
+
+  _buildTerrainGeometry(terrain) {
+    const sx = terrain.segmentsX;
+    const sz = terrain.segmentsZ;
+    const cols = sx + 1;
+    const rows = sz + 1;
+    const positions = [];
+    const uvs = [];
+    const indices = [];
+    const halfW = terrain.width * 0.5;
+    const halfD = terrain.depth * 0.5;
+    for (let z = 0; z < rows; z++) {
+      const v = z / Math.max(1, sz);
+      for (let x = 0; x < cols; x++) {
+        const u = x / Math.max(1, sx);
+        const idx = z * cols + x;
+        positions.push(-halfW + u * terrain.width, terrain.heights[idx] ?? terrain.baseHeight, -halfD + v * terrain.depth);
+        uvs.push(u * 8, v * 8);
+      }
+    }
+    for (let z = 0; z < sz; z++) {
+      for (let x = 0; x < sx; x++) {
+        const a = z * cols + x;
+        const b = a + 1;
+        const c = a + cols;
+        const d = c + 1;
+        indices.push(a, c, b, b, c, d);
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
+    return geometry;
+  }
+
+  _resampleTerrainHeights(terrain, nextX, nextZ) {
+    const oldX = terrain.segmentsX;
+    const oldZ = terrain.segmentsZ;
+    const oldHeights = terrain.heights.slice();
+    const oldCols = oldX + 1;
+    const sample = (u, v) => {
+      const x = Math.max(0, Math.min(oldX, u * oldX));
+      const z = Math.max(0, Math.min(oldZ, v * oldZ));
+      const x0 = Math.floor(x);
+      const z0 = Math.floor(z);
+      const x1 = Math.min(oldX, x0 + 1);
+      const z1 = Math.min(oldZ, z0 + 1);
+      const tx = x - x0;
+      const tz = z - z0;
+      const h00 = oldHeights[z0 * oldCols + x0] ?? terrain.baseHeight;
+      const h10 = oldHeights[z0 * oldCols + x1] ?? terrain.baseHeight;
+      const h01 = oldHeights[z1 * oldCols + x0] ?? terrain.baseHeight;
+      const h11 = oldHeights[z1 * oldCols + x1] ?? terrain.baseHeight;
+      const hx0 = h00 + (h10 - h00) * tx;
+      const hx1 = h01 + (h11 - h01) * tx;
+      return hx0 + (hx1 - hx0) * tz;
+    };
+    const heights = [];
+    for (let z = 0; z <= nextZ; z++) {
+      for (let x = 0; x <= nextX; x++) {
+        heights.push(sample(x / Math.max(1, nextX), z / Math.max(1, nextZ)));
+      }
+    }
+    terrain.segmentsX = nextX;
+    terrain.segmentsZ = nextZ;
+    terrain.heights = heights;
+  }
+
+  _sampleTerrainHeightAt(worldPoint) {
+    let best = null;
+    for (const terrain of this.terrains || []) {
+      const localX = (worldPoint.x || 0) - (terrain.position.x || 0);
+      const localZ = (worldPoint.z || 0) - (terrain.position.z || 0);
+      const u = (localX / terrain.width) + 0.5;
+      const v = (localZ / terrain.depth) + 0.5;
+      if (u < 0 || u > 1 || v < 0 || v > 1) continue;
+      const x = u * terrain.segmentsX;
+      const z = v * terrain.segmentsZ;
+      const x0 = Math.floor(x);
+      const z0 = Math.floor(z);
+      const x1 = Math.min(terrain.segmentsX, x0 + 1);
+      const z1 = Math.min(terrain.segmentsZ, z0 + 1);
+      const tx = x - x0;
+      const tz = z - z0;
+      const cols = terrain.segmentsX + 1;
+      const h00 = terrain.heights[z0 * cols + x0] ?? terrain.baseHeight;
+      const h10 = terrain.heights[z0 * cols + x1] ?? terrain.baseHeight;
+      const h01 = terrain.heights[z1 * cols + x0] ?? terrain.baseHeight;
+      const h11 = terrain.heights[z1 * cols + x1] ?? terrain.baseHeight;
+      const hx0 = h00 + (h10 - h00) * tx;
+      const hx1 = h01 + (h11 - h01) * tx;
+      const y = (terrain.position.y || 0) + hx0 + (hx1 - hx0) * tz;
+      if (best === null || y > best) best = y;
+    }
+    return best;
   }
 
   _rebuildRoadMesh(road) {
@@ -1625,6 +2064,11 @@ export class InteractiveObjectManager {
     if (this.roadGroup.parent !== parent) parent.add(this.roadGroup);
   }
 
+  _attachTerrainGroup() {
+    const parent = this.trackManager?.terrainGroup || this.group;
+    if (this.terrainGroup.parent !== parent) parent.add(this.terrainGroup);
+  }
+
   _getRoadModuleConfig(moduleId, profile = ROAD_DEFAULTS.profile) {
     const id = this._roadModules[moduleId] ? moduleId : this._defaultModuleForProfile(profile);
     return this._roadModules[id] || DEFAULT_ROAD_MODULES.asphalt_straight;
@@ -1677,8 +2121,8 @@ export class InteractiveObjectManager {
   }
 
   _normalizeTrackEntry(entry) {
-    if (Array.isArray(entry)) return { objects: entry, roads: [] };
-    if (!entry || typeof entry !== 'object') return { objects: this._defaultLayout(), roads: [] };
+    if (Array.isArray(entry)) return { objects: entry, roads: [], terrains: [] };
+    if (!entry || typeof entry !== 'object') return { objects: this._defaultLayout(), roads: [], terrains: [] };
     return {
       objects: Array.isArray(entry.objects)
         ? entry.objects
@@ -1686,6 +2130,7 @@ export class InteractiveObjectManager {
           ? entry.layout
           : [],
       roads: Array.isArray(entry.roads) ? entry.roads : [],
+      terrains: Array.isArray(entry.terrains) ? entry.terrains : [],
     };
   }
 
@@ -1711,7 +2156,7 @@ export class InteractiveObjectManager {
 
     return {
       ...storage,
-      version: storage.version || 3,
+      version: storage.version || 4,
       tracks,
     };
   }
@@ -1724,6 +2169,10 @@ export class InteractiveObjectManager {
     return `road-${Date.now().toString(36)}-${this._roadIdCounter++}`;
   }
 
+  _makeTerrainId() {
+    return `terrain-${Date.now().toString(36)}-${this._terrainIdCounter++}`;
+  }
+
   _disposeObject(obj) {
     if (obj.mesh?.parent) obj.mesh.parent.remove(obj.mesh);
     this._disposeMesh(obj.mesh);
@@ -1732,6 +2181,11 @@ export class InteractiveObjectManager {
   _disposeRoad(road) {
     if (road?.mesh) this._disposeMesh(road.mesh);
     road.mesh = null;
+  }
+
+  _disposeTerrain(terrain) {
+    if (terrain?.mesh) this._disposeMesh(terrain.mesh);
+    terrain.mesh = null;
   }
 
   _disposeMesh(mesh) {

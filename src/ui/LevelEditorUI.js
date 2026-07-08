@@ -20,7 +20,13 @@ const CATEGORY_LABELS = {
 };
 
 const MODE_LABELS = { move: '移动', rotate: '旋转', scale: '缩放' };
-const TOOL_LABELS = { object: '物体', road: '道路' };
+const TOOL_LABELS = { object: '物体', road: '道路', terrain: '地形', random: '生成' };
+const TERRAIN_BRUSH_LABELS = {
+  raise: '抬高',
+  lower: '压低',
+  smooth: '平滑',
+  flatten: '夷平',
+};
 const ROAD_PROFILE_OPTIONS = [
   ['asphalt_2lane', '沥青双车道'],
   ['concrete_service', '混凝土道路'],
@@ -77,6 +83,27 @@ export class LevelEditorUI {
     this.selectedIds = [];
     this.selectedRoadId = null;
     this.selectedRoadPointIndex = null;
+    this.selectedTerrainId = null;
+    this.selectedTerrainId = null;
+    this.terrainBrushMode = 'raise';
+    this.terrainBrushRadius = 9;
+    this.terrainBrushStrength = 0.45;
+    this.terrainFlattenHeight = 0;
+    this.randomSettings = {
+      seed: '',
+      size: 220,
+      roadPoints: 12,
+      roadRadius: 64,
+      objectCount: 42,
+      terrainHeight: 5.5,
+      generateTerrain: true,
+      generateRoad: true,
+      generateObjects: true,
+      closedRoad: true,
+    };
+    this.randomObjectPool = new Set();
+    this.randomRoadModulePool = new Set();
+    this._randomPoolsInitialized = false;
     this.editMode = 'move';
     this.spaceMode = 'world';
     this.snapEnabled = true;
@@ -110,6 +137,7 @@ export class LevelEditorUI {
     this._lastPointerPoint = null;
     this._lastPropertySnapshot = null;
     this._roadHelperGroup = null;
+    this._terrainBrushHelper = null;
     this._cameraKeys = new Set();
 
     this._build();
@@ -180,14 +208,16 @@ export class LevelEditorUI {
     this.selectedIds = [];
     this.selectedRoadId = null;
     this.selectedRoadPointIndex = null;
+    this.selectedTerrainId = null;
     this._clearRoadHelpers();
+    this._setTerrainBrushHelperVisible(false);
     this._dirty = false;
   }
 
   refresh() {
     if (!this.root) return;
     this.trackSelect.value = this.trackId || 'city_circuit';
-    this.countLabel.textContent = `${this.manager?.objects?.length || 0} 物体 / ${this.manager?.roads?.length || 0} 道路`;
+    this.countLabel.textContent = `${this.manager?.objects?.length || 0} 物体 / ${this.manager?.roads?.length || 0} 道路 / ${this.manager?.terrains?.length || 0} 地形`;
     this.dirtyLabel.textContent = this._dirty ? '未保存' : '已保存';
     this.dirtyLabel.style.color = this._dirty ? '#ffd166' : '#78f0c2';
     this._renderPalette();
@@ -266,7 +296,7 @@ export class LevelEditorUI {
     this.modeBar = document.createElement('div');
     this.modeBar.className = 'le-modebar le-panel';
     this.modeBar.innerHTML = `
-      <button class="le-mode" data-tool="object">物体</button><button class="le-mode" data-tool="road">道路</button>
+      <button class="le-mode" data-tool="object">物体</button><button class="le-mode" data-tool="road">道路</button><button class="le-mode" data-tool="terrain">地形</button><button class="le-mode" data-tool="random">生成</button>
       <button class="le-mode" data-mode="move">移动</button><button class="le-mode" data-mode="rotate">旋转</button><button class="le-mode" data-mode="scale">缩放</button>
       <button class="le-mode" data-space="toggle">世界</button><button class="le-mode" data-toggle="grid">网格</button><button class="le-mode" data-toggle="collision">碰撞半径</button><button class="le-mode" data-toggle="snap">15°吸附</button>
     `;
@@ -335,6 +365,7 @@ export class LevelEditorUI {
       #level-editor-panel .le-thumb { width:42px;height:34px;border:1px solid rgba(255,255,255,0.13);background:linear-gradient(135deg,rgba(120,240,194,0.28),rgba(74,163,255,0.12));display:grid;place-items:center;font-weight:950;color:#fff; }
       #level-editor-panel .le-object-name { font-weight:900;color:#fff;font-size:0.76rem; }
       #level-editor-panel .le-object-meta { color:#91a6b8;font-size:0.65rem;margin-top:2px; }
+      #level-editor-panel .le-check-row { display:grid;grid-template-columns:20px 1fr;gap:7px;align-items:center;padding:6px 7px;border:1px solid rgba(255,255,255,0.09);background:rgba(255,255,255,0.035);font-size:0.72rem;color:#eaf6ff; }
       #level-editor-panel .le-modebar { position:absolute;left:50%;bottom:22px;transform:translateX(-50%);display:flex;gap:7px;padding:9px; }
       #level-editor-panel .le-mode.active { color:#07131c;background:#78f0c2;border-color:#78f0c2;text-shadow:none; }
       #level-editor-panel .le-status { position:absolute;left:282px;right:342px;bottom:78px;min-height:34px;max-height:38px;padding:8px 12px;color:#d6e7f5;font-size:0.74rem;line-height:1.25;pointer-events:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
@@ -398,14 +429,32 @@ export class LevelEditorUI {
       if (action === 'delete-road') this._deleteRoadSelection(false);
       if (action === 'delete-road-point') this._deleteRoadSelection(true);
       if (action === 'reverse-road') this._reverseSelectedRoad();
+      if (action === 'new-terrain') this._createTerrain();
+      if (action === 'delete-terrain') this._deleteTerrain();
+      if (action === 'reset-terrain') this._resetTerrainHeights(false);
+      if (action === 'flatten-terrain') this._resetTerrainHeights(true);
+      if (action === 'generate-random-level') this._generateRandomLevel();
+      if (action === 'random-select-all') this._selectAllRandomResources();
       if (action === 'add-layer') this._addLayer();
       if (action === 'toggle-layer') this._toggleLayer(event.target.dataset.layerId, 'visible');
       if (action === 'lock-layer') this._toggleLayer(event.target.dataset.layerId, 'locked');
     });
     this.paletteEl.addEventListener('click', event => {
+      const terrainSelect = event.target?.closest?.('[data-terrain-select]')?.dataset?.terrainSelect;
+      const brushMode = event.target?.closest?.('[data-brush-mode]')?.dataset?.brushMode;
       const roadSelect = event.target?.closest?.('[data-road-select]')?.dataset?.roadSelect;
       const profile = event.target?.closest?.('[data-road-profile]')?.dataset?.roadProfile;
       const moduleId = event.target?.closest?.('[data-road-module]')?.dataset?.roadModule;
+      if (terrainSelect) {
+        this._selectTerrain(terrainSelect, '已选中地形，可在场景里拖动笔刷雕刻。');
+        return;
+      }
+      if (brushMode) {
+        this.terrainBrushMode = brushMode;
+        this._setToolMode('terrain');
+        this._setStatus(`地形笔刷：${TERRAIN_BRUSH_LABELS[brushMode] || brushMode}。`);
+        return;
+      }
       if (!roadSelect && !profile && !moduleId) return;
       if (roadSelect) {
         this._selectRoad(roadSelect, null, '已选中道路，可在右侧二次编辑属性，也可以拖动绿色控制点调整曲线。');
@@ -423,8 +472,22 @@ export class LevelEditorUI {
         : `已选择道路基础类型：${this._getRoadProfileLabel(profile)}。点击地面开始放样道路。`);
       this.refresh();
     });
+    this.paletteEl.addEventListener('change', event => {
+      const objectId = event.target?.dataset?.randomObject;
+      const moduleId = event.target?.dataset?.randomRoadModule;
+      if (objectId) {
+        event.target.checked ? this.randomObjectPool.add(objectId) : this.randomObjectPool.delete(objectId);
+        this.refresh();
+      }
+      if (moduleId) {
+        event.target.checked ? this.randomRoadModulePool.add(moduleId) : this.randomRoadModulePool.delete(moduleId);
+        this.refresh();
+      }
+    });
     this.propertiesEl.addEventListener('focusin', event => {
-      this._lastPropertySnapshot = this.toolMode === 'road' ? this._snapshotLayout() : this._snapshotSelection();
+      this._lastPropertySnapshot = (this.toolMode === 'road' || this.toolMode === 'terrain' || this.toolMode === 'random')
+        ? this._snapshotLayout()
+        : this._snapshotSelection();
       if (event.target?.matches?.(EDITOR_TEXT_INPUT_SELECTOR)) this._cameraKeys.clear();
     });
     this.propertiesEl.addEventListener('input', event => this._handlePropertyInput(event, false));
@@ -477,6 +540,19 @@ export class LevelEditorUI {
     this._roadHelperGroup.name = 'level-editor-road-helpers';
     this._roadHelperGroup.visible = false;
     this.manager?.group?.add?.(this._roadHelperGroup);
+    const brushMat = new THREE.MeshBasicMaterial({
+      color: 0xffd166,
+      transparent: true,
+      opacity: 0.76,
+      depthTest: false,
+      side: THREE.DoubleSide,
+    });
+    this._terrainBrushHelper = new THREE.Mesh(new THREE.RingGeometry(0.96, 1, 72), brushMat);
+    this._terrainBrushHelper.name = 'level-editor-terrain-brush';
+    this._terrainBrushHelper.rotation.x = -Math.PI / 2;
+    this._terrainBrushHelper.visible = false;
+    this._terrainBrushHelper.renderOrder = 30;
+    this.manager?.group?.add?.(this._terrainBrushHelper);
   }
 
   _createGizmo() {
@@ -519,6 +595,14 @@ export class LevelEditorUI {
   _renderPalette() {
     if (this.toolMode === 'road') {
       this._renderRoadPalette();
+      return;
+    }
+    if (this.toolMode === 'terrain') {
+      this._renderTerrainPalette();
+      return;
+    }
+    if (this.toolMode === 'random') {
+      this._renderRandomPalette();
       return;
     }
     const types = this.manager?.getTypes?.() || [];
@@ -569,6 +653,104 @@ export class LevelEditorUI {
       }
       this.paletteEl.appendChild(section);
     }
+  }
+
+  _renderTerrainPalette() {
+    this.paletteEl.textContent = '';
+    const info = document.createElement('div');
+    info.className = 'le-empty';
+    info.textContent = '地形模式：新建地形后，选择笔刷并在地形上拖动。支持抬高、压低、平滑、夷平，地形会保存并可生成车辆物理。';
+    this.paletteEl.appendChild(info);
+
+    const terrains = this.manager?.getTerrains?.() || [];
+    const section = document.createElement('section');
+    section.className = 'le-category';
+    const head = document.createElement('button');
+    head.type = 'button';
+    head.className = 'le-category-head';
+    head.innerHTML = `<span>已有地形</span><span>${terrains.length}</span>`;
+    section.appendChild(head);
+    const body = document.createElement('div');
+    body.className = 'le-category-body';
+    if (!terrains.length) {
+      const empty = document.createElement('div');
+      empty.className = 'le-empty';
+      empty.textContent = '还没有编辑器地形。点击右侧“新建地形”创建一个可雕刻地形块。';
+      body.appendChild(empty);
+    } else {
+      for (const terrain of terrains) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `le-object-card${this.selectedTerrainId === terrain.id ? ' active' : ''}`;
+        btn.dataset.terrainSelect = terrain.id;
+        btn.innerHTML = `
+          <span class="le-thumb">地</span>
+          <span>
+            <span class="le-object-name">${this._escape(terrain.note || terrain.id)}</span>
+            <span class="le-object-meta">${Math.round(terrain.width)} x ${Math.round(terrain.depth)} · ${terrain.segmentsX}x${terrain.segmentsZ}</span>
+          </span>
+        `;
+        body.appendChild(btn);
+      }
+    }
+    section.appendChild(body);
+    this.paletteEl.appendChild(section);
+
+    const brushSection = document.createElement('section');
+    brushSection.className = 'le-category';
+    brushSection.innerHTML = `<button type="button" class="le-category-head"><span>笔刷</span><span>${TERRAIN_BRUSH_LABELS[this.terrainBrushMode] || this.terrainBrushMode}</span></button>`;
+    const brushBody = document.createElement('div');
+    brushBody.className = 'le-category-body';
+    for (const [mode, label] of Object.entries(TERRAIN_BRUSH_LABELS)) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `le-object-card${this.terrainBrushMode === mode ? ' active' : ''}`;
+      btn.dataset.brushMode = mode;
+      btn.innerHTML = `<span class="le-thumb">${label.slice(0, 1)}</span><span><span class="le-object-name">${label}</span><span class="le-object-meta">半径 ${this.terrainBrushRadius} · 强度 ${this.terrainBrushStrength}</span></span>`;
+      brushBody.appendChild(btn);
+    }
+    brushSection.appendChild(brushBody);
+    this.paletteEl.appendChild(brushSection);
+  }
+
+  _renderRandomPalette() {
+    this._ensureRandomPools();
+    this.paletteEl.textContent = '';
+    const info = document.createElement('div');
+    info.className = 'le-empty';
+    info.textContent = '随机关卡生成：选择资源池和参数后，会生成地形、闭合道路、功能点、碰撞物和装饰物。生成会覆盖当前编辑布局，但可用撤销恢复。';
+    this.paletteEl.appendChild(info);
+
+    const objectTypes = this.manager?.getTypes?.() || [];
+    const objectSection = document.createElement('section');
+    objectSection.className = 'le-category';
+    objectSection.innerHTML = `<button type="button" class="le-category-head"><span>物体资源池</span><span>${this.randomObjectPool.size}/${objectTypes.length}</span></button>`;
+    const objectBody = document.createElement('div');
+    objectBody.className = 'le-category-body';
+    for (const type of objectTypes) {
+      const label = type.label || type.id;
+      const row = document.createElement('label');
+      row.className = 'le-check-row';
+      row.innerHTML = `<input data-random-object="${this._escape(type.id)}" type="checkbox" ${this.randomObjectPool.has(type.id) ? 'checked' : ''}><span>${this._escape(label)}</span>`;
+      objectBody.appendChild(row);
+    }
+    objectSection.appendChild(objectBody);
+    this.paletteEl.appendChild(objectSection);
+
+    const modules = this.manager?.getRoadModules?.() || [];
+    const moduleSection = document.createElement('section');
+    moduleSection.className = 'le-category';
+    moduleSection.innerHTML = `<button type="button" class="le-category-head"><span>道路模块池</span><span>${this.randomRoadModulePool.size}/${modules.length}</span></button>`;
+    const moduleBody = document.createElement('div');
+    moduleBody.className = 'le-category-body';
+    for (const module of modules) {
+      const row = document.createElement('label');
+      row.className = 'le-check-row';
+      row.innerHTML = `<input data-random-road-module="${this._escape(module.id)}" type="checkbox" ${this.randomRoadModulePool.has(module.id) ? 'checked' : ''}><span>${this._escape(module.label || module.id)}</span>`;
+      moduleBody.appendChild(row);
+    }
+    moduleSection.appendChild(moduleBody);
+    this.paletteEl.appendChild(moduleSection);
   }
 
   _renderRoadPalette() {
@@ -669,6 +851,14 @@ export class LevelEditorUI {
       this._renderRoadProperties();
       return;
     }
+    if (this.toolMode === 'terrain') {
+      this._renderTerrainProperties();
+      return;
+    }
+    if (this.toolMode === 'random') {
+      this._renderRandomProperties();
+      return;
+    }
     const selected = this._getSelectedObjects();
     if (!selected.length) {
       this.propertiesEl.innerHTML = '<div class="le-empty">未选中物体。点击场景内物体可编辑；按住 Shift 可多选；空白区域 Shift+拖拽可框选。</div>';
@@ -700,6 +890,76 @@ export class LevelEditorUI {
         <label class="le-field">备注<input data-key="note" value="${this._escape(obj.note || '')}" placeholder="例如：弯道入口提示"></label>
       </div>
       <div class="le-prop-actions"><button class="le-btn" data-action="duplicate">复制</button><button class="le-btn le-danger" data-action="delete">删除</button></div>
+    `;
+  }
+
+  _renderTerrainProperties() {
+    const terrain = this.manager?.getTerrain?.(this.selectedTerrainId);
+    if (!terrain) {
+      this.propertiesEl.innerHTML = `
+        <div class="le-empty">未选中地形。新建地形后，可用笔刷在场景里拖动雕刻。</div>
+        <button class="le-btn le-primary" data-action="new-terrain">新建地形</button>
+      `;
+      return;
+    }
+    this.propertiesEl.innerHTML = `
+      <div class="le-group"><div class="le-group-title">地形基础</div>
+        <label class="le-field">编号<input value="${this._escape(terrain.id)}" disabled></label>
+        ${this._rangeField('terrain.width', '宽度', terrain.width, 16, 1024, 1)}
+        ${this._rangeField('terrain.depth', '深度', terrain.depth, 16, 1024, 1)}
+        ${this._rangeField('terrain.segmentsX', '横向网格', terrain.segmentsX, 4, 128, 1)}
+        ${this._rangeField('terrain.segmentsZ', '纵向网格', terrain.segmentsZ, 4, 128, 1)}
+        ${this._vectorFieldsWithPrefix('terrain.position', terrain.position)}
+        ${this._rangeField('terrain.baseHeight', '整体高度', terrain.baseHeight, -10, 20, 0.05)}
+      </div>
+      <div class="le-group"><div class="le-group-title">笔刷</div>
+        ${this._selectField('brush.mode', '模式', this.terrainBrushMode, Object.entries(TERRAIN_BRUSH_LABELS))}
+        ${this._rangeField('brush.radius', '半径', this.terrainBrushRadius, 1, 48, 0.5)}
+        ${this._rangeField('brush.strength', '强度', this.terrainBrushStrength, 0.02, 3, 0.01)}
+        ${this._rangeField('brush.flattenHeight', '夷平高度', this.terrainFlattenHeight, -10, 25, 0.05)}
+      </div>
+      <div class="le-group"><div class="le-group-title">材质与物理</div>
+        <label class="le-field">颜色<input data-key="terrain.color" type="color" value="#${Number(terrain.color || 0).toString(16).padStart(6, '0').slice(-6)}"></label>
+        ${this._rangeField('terrain.roughness', '粗糙度', terrain.roughness, 0, 1, 0.01)}
+        ${this._checkboxField('terrain.generateCollision', '生成车辆物理', terrain.generateCollision)}
+        ${this._checkboxField('terrain.visible', '显示地形', terrain.visible)}
+        ${this._selectField('terrain.layer', '图层', terrain.layer || 'default', this.layers.map(layer => [layer.id, layer.name]))}
+        <label class="le-field">备注<input data-key="terrain.note" value="${this._escape(terrain.note || '')}" placeholder="例如：山坡 / 草地 / 越野区域"></label>
+      </div>
+      <div class="le-prop-actions">
+        <button class="le-btn" data-action="new-terrain">新建地形</button>
+        <button class="le-btn" data-action="flatten-terrain">全部夷平</button>
+        <button class="le-btn" data-action="reset-terrain">重置高度</button>
+        <button class="le-btn le-danger" data-action="delete-terrain">删除地形</button>
+      </div>
+    `;
+  }
+
+  _renderRandomProperties() {
+    this._ensureRandomPools();
+    const s = this.randomSettings;
+    this.propertiesEl.innerHTML = `
+      <div class="le-group"><div class="le-group-title">生成内容</div>
+        ${this._checkboxField('random.generateTerrain', '生成地形', s.generateTerrain)}
+        ${this._checkboxField('random.generateRoad', '生成道路', s.generateRoad)}
+        ${this._checkboxField('random.generateObjects', '生成物体/功能点', s.generateObjects)}
+        ${this._checkboxField('random.closedRoad', '闭合跑道', s.closedRoad)}
+      </div>
+      <div class="le-group"><div class="le-group-title">关卡参数</div>
+        <label class="le-field">种子<input data-key="random.seed" value="${this._escape(s.seed || '')}" placeholder="留空则随机"></label>
+        ${this._rangeField('random.size', '关卡范围', s.size, 80, 600, 5)}
+        ${this._rangeField('random.roadPoints', '道路点数', s.roadPoints, 4, 28, 1)}
+        ${this._rangeField('random.roadRadius', '道路半径', s.roadRadius, 24, 240, 2)}
+        ${this._rangeField('random.objectCount', '物体数量', s.objectCount, 0, 180, 1)}
+        ${this._rangeField('random.terrainHeight', '地形起伏', s.terrainHeight, 0, 24, 0.25)}
+      </div>
+      <div class="le-group"><div class="le-group-title">资源池状态</div>
+        <div class="le-empty">当前可用：${this.randomObjectPool.size} 个物体资源 / ${this.randomRoadModulePool.size} 个道路模块。左侧可勾选资源池。天空沿用当前关卡天空盒和天气设置。</div>
+      </div>
+      <div class="le-prop-actions">
+        <button class="le-btn le-primary" data-action="generate-random-level">生成当前关卡</button>
+        <button class="le-btn" data-action="random-select-all">资源全选</button>
+      </div>
     `;
   }
 
@@ -814,6 +1074,9 @@ export class LevelEditorUI {
       this.domElement?.setPointerCapture?.(event.pointerId);
       return;
     }
+    if (this.toolMode === 'terrain') {
+      if (this._handleTerrainPointerDown(event)) return;
+    }
     if (this.toolMode === 'road') {
       if (this._handleRoadPointerDown(event)) return;
     }
@@ -883,6 +1146,14 @@ export class LevelEditorUI {
       this._renderProperties();
       return;
     }
+    if (this._pointerDrag?.type === 'terrainBrush') {
+      event.preventDefault(); event.stopPropagation();
+      const hit = this._pickTerrain(event);
+      if (!hit) return;
+      this.selectedTerrainId = hit.terrainId;
+      this._paintSelectedTerrain(hit.point);
+      return;
+    }
     if (this._pointerDrag?.type === 'object') {
       event.preventDefault(); event.stopPropagation();
       const point = this._pickGround(event);
@@ -903,6 +1174,11 @@ export class LevelEditorUI {
     const point = this._pickGround(event);
     if (!point) return;
     this._lastPointerPoint = point;
+    if (this.toolMode === 'terrain') {
+      const hit = this._pickTerrain(event);
+      this._updateTerrainBrushHelper(hit?.point || point);
+      return;
+    }
     if (this.toolMode === 'road') return;
     if (this.selectedIds.length) return;
     this._ensurePreview();
@@ -912,11 +1188,12 @@ export class LevelEditorUI {
   _handlePointerUp(event) {
     if (!this.visible || !this._pointerDrag) return;
     const drag = this._pointerDrag;
-    if (drag.type === 'object' || drag.type === 'gizmo' || drag.type === 'roadPoint') {
+    if (drag.type === 'object' || drag.type === 'gizmo' || drag.type === 'roadPoint' || drag.type === 'terrainBrush') {
       const after = this._snapshotLayout();
       if (this._layoutChanged(drag.startLayout, after)) {
         const label = drag.type === 'roadPoint'
           ? '移动道路控制点'
+          : drag.type === 'terrainBrush' ? `地形笔刷：${TERRAIN_BRUSH_LABELS[this.terrainBrushMode] || this.terrainBrushMode}`
           : drag.type === 'gizmo' ? `${MODE_LABELS[this.editMode]}${drag.startRoad ? '道路' : '物体'}` : '移动物体';
         this._pushHistory({ label, before: drag.startLayout, after });
         this._markDirty(false);
@@ -939,6 +1216,7 @@ export class LevelEditorUI {
     if ((event.ctrlKey || event.metaKey) && event.code === 'KeyZ') { event.preventDefault(); event.stopPropagation(); this.undo(); return; }
     if ((event.ctrlKey || event.metaKey) && (event.code === 'KeyY' || (event.shiftKey && event.code === 'KeyZ'))) { event.preventDefault(); event.stopPropagation(); this.redo(); return; }
     if (this.toolMode === 'road' && (event.code === 'Delete' || event.code === 'Backspace')) { event.preventDefault(); event.stopPropagation(); this._deleteRoadSelection(Boolean(this.selectedRoadPointIndex != null)); return; }
+    if (this.toolMode === 'terrain' && (event.code === 'Delete' || event.code === 'Backspace')) { event.preventDefault(); event.stopPropagation(); this._deleteTerrain(); return; }
     if (event.code === 'Delete' || event.code === 'Backspace') { event.preventDefault(); event.stopPropagation(); this._deleteSelection(); return; }
     if ((event.ctrlKey || event.metaKey) && event.code === 'KeyD') { event.preventDefault(); event.stopPropagation(); this._duplicateSelection(); return; }
     if (event.code === 'KeyW') this._setEditMode('move');
@@ -1094,6 +1372,26 @@ export class LevelEditorUI {
     return true;
   }
 
+  _handleTerrainPointerDown(event) {
+    const hit = this._pickTerrain(event);
+    if (!hit) {
+      const terrain = this.manager?.getTerrain?.(this.selectedTerrainId);
+      if (!terrain) this._setStatus('请先新建或选择一个地形，再使用笔刷。');
+      return false;
+    }
+    event.preventDefault(); event.stopPropagation();
+    this._selectTerrain(hit.terrainId);
+    this._pointerDrag = {
+      type: 'terrainBrush',
+      pointerId: event.pointerId,
+      terrainId: hit.terrainId,
+      startLayout: this._snapshotLayout(),
+    };
+    this.domElement?.setPointerCapture?.(event.pointerId);
+    this._paintSelectedTerrain(hit.point);
+    return true;
+  }
+
   _pickRoadPoint(event) {
     if (!this._roadHelperGroup?.visible) return null;
     this._setPointer(event);
@@ -1120,6 +1418,48 @@ export class LevelEditorUI {
     return null;
   }
 
+  _pickTerrain(event) {
+    this._setPointer(event);
+    const meshes = this.manager?.getTerrainMeshes?.() || [];
+    const hits = meshes.length ? this._raycaster.intersectObjects(meshes, true) : [];
+    const hit = hits.find(item => item.object?.userData?.editorTerrainId);
+    if (!hit) return null;
+    return {
+      terrainId: hit.object.userData.editorTerrainId,
+      point: hit.point?.clone?.() || new THREE.Vector3(),
+    };
+  }
+
+  _selectTerrain(terrainId, status = '') {
+    const terrain = this.manager?.getTerrain?.(terrainId);
+    if (!terrain) return false;
+    this.toolMode = 'terrain';
+    this.selectedIds = [];
+    this.selectedRoadId = null;
+    this.selectedRoadPointIndex = null;
+    this.selectedTerrainId = terrain.id;
+    this._removePreview();
+    this._lastPropertySnapshot = this._snapshotLayout();
+    if (status) this._setStatus(status);
+    this.refresh();
+    return true;
+  }
+
+  _paintSelectedTerrain(point) {
+    const terrain = this.manager?.getTerrain?.(this.selectedTerrainId);
+    if (!terrain || !point) return;
+    this.manager?.paintTerrainAtPoint?.(terrain.id, point, {
+      mode: this.terrainBrushMode,
+      radius: this.terrainBrushRadius,
+      strength: this.terrainBrushStrength,
+      targetHeight: this.terrainFlattenHeight,
+    }, { save: false });
+    this._markDirty(false);
+    this._lastPointerPoint = point.clone();
+    this._updateTerrainBrushHelper(point);
+    this._renderProperties();
+  }
+
   _selectRoad(roadId, pointIndex = null, status = '') {
     const road = this.manager?.getRoad?.(roadId);
     if (!road) return false;
@@ -1142,6 +1482,271 @@ export class LevelEditorUI {
     this.selectedRoadPointIndex = null;
     this._setStatus('已准备新建道路：点击地面放置第一个控制点。');
     this.refresh();
+  }
+
+  _createTerrain() {
+    const before = this._snapshotLayout();
+    const center = this._lastPointerPoint || this._getSelectionCenter() || new THREE.Vector3();
+    const terrain = this.manager?.addTerrain?.({
+      position: { x: center.x || 0, y: 0, z: center.z || 0 },
+      width: 160,
+      depth: 160,
+      segmentsX: 32,
+      segmentsZ: 32,
+      baseHeight: -0.04,
+      note: '编辑器地形',
+    }, { save: false });
+    if (!terrain) return;
+    this.selectedTerrainId = terrain.id;
+    this.toolMode = 'terrain';
+    const after = this._snapshotLayout();
+    this._pushHistory({ label: '新建地形', before, after });
+    this._markDirty(false);
+    this._setStatus('已新建地形：在地形上拖动鼠标即可雕刻。');
+    this.refresh();
+  }
+
+  _deleteTerrain() {
+    const terrain = this.manager?.getTerrain?.(this.selectedTerrainId);
+    if (!terrain) return;
+    const before = this._snapshotLayout();
+    this.manager?.removeTerrain?.(terrain.id, { save: false });
+    this.selectedTerrainId = null;
+    const after = this._snapshotLayout();
+    this._pushHistory({ label: '删除地形', before, after });
+    this._markDirty(false);
+    this.refresh();
+  }
+
+  _resetTerrainHeights(useFlattenHeight = false) {
+    const terrain = this.manager?.getTerrain?.(this.selectedTerrainId);
+    if (!terrain) return;
+    const before = this._snapshotLayout();
+    const height = useFlattenHeight ? this.terrainFlattenHeight : terrain.baseHeight;
+    const count = (terrain.segmentsX + 1) * (terrain.segmentsZ + 1);
+    this.manager?.updateTerrain?.(terrain.id, {
+      heights: Array(count).fill(height),
+      baseHeight: height,
+    }, { save: false });
+    const after = this._snapshotLayout();
+    this._pushHistory({ label: useFlattenHeight ? '夷平地形' : '重置地形高度', before, after });
+    this._markDirty(false);
+    this.refresh();
+  }
+
+  _ensureRandomPools() {
+    if (this._randomPoolsInitialized) return;
+    this.randomObjectPool = new Set((this.manager?.getTypes?.() || []).map(type => type.id));
+    this.randomRoadModulePool = new Set((this.manager?.getRoadModules?.() || []).map(module => module.id));
+    this._randomPoolsInitialized = true;
+  }
+
+  _selectAllRandomResources() {
+    this._randomPoolsInitialized = false;
+    this._ensureRandomPools();
+    this._setStatus('随机关卡资源池已全选。');
+    this.refresh();
+  }
+
+  _generateRandomLevel() {
+    this._ensureRandomPools();
+    const settings = this.randomSettings;
+    const objectTypes = (this.manager?.getTypes?.() || []).filter(type => this.randomObjectPool.has(type.id));
+    const modules = (this.manager?.getRoadModules?.() || []).filter(module => this.randomRoadModulePool.has(module.id));
+    if (settings.generateObjects && !objectTypes.length) {
+      this._setStatus('生成失败：物体资源池为空。');
+      return;
+    }
+    if (settings.generateRoad && !modules.length) {
+      this._setStatus('生成失败：道路模块池为空。');
+      return;
+    }
+    if (!window.confirm('随机关卡会覆盖当前编辑布局，但可以用撤销恢复。继续生成吗？')) return;
+
+    const before = this._snapshotLayout();
+    const rng = this._makeRandom(settings.seed || `${Date.now()}-${Math.random()}`);
+    const size = Number(settings.size) || 220;
+    const roadRadius = Math.min(size * 0.48, Number(settings.roadRadius) || 64);
+    const roadPoints = [];
+    const pointCount = Math.round(clamp(settings.roadPoints, 4, 28, 12));
+    const module = modules[Math.floor(rng() * modules.length)] || modules[0];
+    const roadWidth = Math.max(6, Number(module?.width) || 8);
+
+    if (settings.generateRoad) {
+      if (settings.closedRoad) {
+        for (let i = 0; i < pointCount; i++) {
+          const angle = (i / pointCount) * Math.PI * 2;
+          const radius = roadRadius * (0.78 + rng() * 0.38);
+          roadPoints.push({
+            x: Math.cos(angle) * radius,
+            y: 0.08,
+            z: Math.sin(angle) * radius,
+          });
+        }
+      } else {
+        for (let i = 0; i < pointCount; i++) {
+          const t = pointCount <= 1 ? 0 : i / (pointCount - 1);
+          roadPoints.push({
+            x: (t - 0.5) * roadRadius * 2.2,
+            y: 0.08,
+            z: Math.sin(t * Math.PI * 2.4) * roadRadius * 0.42 + (rng() - 0.5) * 14,
+          });
+        }
+      }
+    }
+
+    const terrains = [];
+    if (settings.generateTerrain) {
+      const segments = 44;
+      const heights = [];
+      const half = size * 0.5;
+      for (let z = 0; z <= segments; z++) {
+        const wz = -half + (z / segments) * size;
+        for (let x = 0; x <= segments; x++) {
+          const wx = -half + (x / segments) * size;
+          const noise = this._terrainNoise(wx, wz, rng, settings.terrainHeight);
+          const roadDist = roadPoints.length >= 2 ? this._distanceToPolylineXZ({ x: wx, z: wz }, roadPoints, Boolean(settings.closedRoad)) : Infinity;
+          const roadBlend = roadDist < roadWidth * 2.6 ? Math.min(1, Math.max(0, (roadDist - roadWidth * 0.65) / Math.max(1, roadWidth * 1.95))) : 1;
+          heights.push(noise * roadBlend - 0.06 * (1 - roadBlend));
+        }
+      }
+      terrains.push({
+        id: 'terrain-random-main',
+        width: size,
+        depth: size,
+        segmentsX: segments,
+        segmentsZ: segments,
+        baseHeight: 0,
+        position: { x: 0, y: 0, z: 0 },
+        heights,
+        color: 0x536f45,
+        roughness: 0.98,
+        generateCollision: true,
+        note: '随机关卡地形',
+      });
+    }
+
+    const roads = [];
+    if (settings.generateRoad && roadPoints.length >= 2) {
+      roads.push({
+        id: 'road-random-main',
+        profile: module?.profile || 'asphalt_2lane',
+        generationMode: 'deformModule',
+        moduleId: module?.id || 'asphalt_straight',
+        moduleSpacing: module?.spacing || module?.length || 7.8,
+        moduleScale: 1,
+        moduleYOffset: 0.06,
+        width: roadWidth,
+        segmentLength: 1.6,
+        textureScale: 9,
+        banking: 0,
+        snapToGround: false,
+        generateCollision: true,
+        generateAiLine: true,
+        closed: Boolean(settings.closedRoad),
+        layer: 'default',
+        note: '随机生成主路',
+        points: roadPoints,
+      });
+    }
+
+    const objects = [];
+    if (settings.generateObjects && objectTypes.length) {
+      const boostTypes = objectTypes.filter(type => type.effect === 'boost' || /boost|nitro|pad/i.test(type.id));
+      const count = Math.round(clamp(settings.objectCount, 0, 180, 42));
+      for (let i = 0; i < count; i++) {
+        const placeBoost = boostTypes.length && roadPoints.length >= 2 && i % 7 === 0;
+        const type = placeBoost ? boostTypes[Math.floor(rng() * boostTypes.length)] : objectTypes[Math.floor(rng() * objectTypes.length)];
+        let pos;
+        let yaw = rng() * Math.PI * 2;
+        if (placeBoost) {
+          const idx = Math.floor(rng() * roadPoints.length);
+          const a = roadPoints[idx];
+          const b = roadPoints[(idx + 1) % roadPoints.length] || roadPoints[idx];
+          const t = rng();
+          pos = { x: a.x + (b.x - a.x) * t, y: 0.14, z: a.z + (b.z - a.z) * t };
+          yaw = Math.atan2((b.x - a.x), (b.z - a.z));
+        } else {
+          for (let attempt = 0; attempt < 18; attempt++) {
+            const angle = rng() * Math.PI * 2;
+            const radius = (0.18 + rng() * 0.78) * size * 0.5;
+            const candidate = { x: Math.cos(angle) * radius, y: 0.12, z: Math.sin(angle) * radius };
+            const roadDist = roadPoints.length >= 2 ? this._distanceToPolylineXZ(candidate, roadPoints, Boolean(settings.closedRoad)) : Infinity;
+            if (roadDist > roadWidth * 1.35 || attempt > 12) {
+              pos = candidate;
+              break;
+            }
+          }
+        }
+        objects.push({
+          type: type.id,
+          position: pos || { x: 0, y: 0.12, z: 0 },
+          rotationY: yaw,
+          scale: 0.85 + rng() * 0.55,
+          snapToGround: true,
+          layer: 'default',
+          note: placeBoost ? '随机功能点' : '随机摆放物',
+        });
+      }
+    }
+
+    const layout = { version: 4, objects, roads, terrains };
+    const result = this.manager?.replaceCurrentTrackLayout?.(layout, { save: false });
+    if (result?.ok === false) {
+      this._setStatus(`随机关卡生成失败：${result.error?.message || '布局无效'}`);
+      return;
+    }
+    this.selectedIds = [];
+    this.selectedRoadId = roads[0]?.id || null;
+    this.selectedRoadPointIndex = null;
+    this.selectedTerrainId = terrains[0]?.id || null;
+    this.toolMode = roads.length ? 'road' : terrains.length ? 'terrain' : 'object';
+    this._pushHistory({ label: '生成随机关卡', before, after: this._snapshotLayout() });
+    this._markDirty(false);
+    this._setStatus(`已生成随机关卡：${objects.length} 个物体 / ${roads.length} 条道路 / ${terrains.length} 个地形。保存后写入当前关卡。`);
+    this.refresh();
+  }
+
+  _makeRandom(seed) {
+    let h = 2166136261;
+    const text = String(seed || 'street-racer');
+    for (let i = 0; i < text.length; i++) {
+      h ^= text.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return () => {
+      h += 0x6d2b79f5;
+      let t = h;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  _terrainNoise(x, z, rng, amplitude = 5) {
+    const a = Number(amplitude) || 0;
+    const wave = Math.sin(x * 0.035 + 1.7) * Math.cos(z * 0.031 - 0.8);
+    const ridge = Math.sin((x + z) * 0.018) * 0.55;
+    const micro = (rng() - 0.5) * 0.22;
+    return (wave * 0.62 + ridge * 0.28 + micro) * a;
+  }
+
+  _distanceToPolylineXZ(point, points = [], closed = false) {
+    if (points.length < 2) return Infinity;
+    let best = Infinity;
+    const count = closed ? points.length : points.length - 1;
+    for (let i = 0; i < count; i++) {
+      const a = points[i];
+      const b = points[(i + 1) % points.length];
+      const abx = b.x - a.x;
+      const abz = b.z - a.z;
+      const lenSq = abx * abx + abz * abz || 1;
+      const t = Math.max(0, Math.min(1, ((point.x - a.x) * abx + (point.z - a.z) * abz) / lenSq));
+      const px = a.x + abx * t;
+      const pz = a.z + abz * t;
+      best = Math.min(best, Math.hypot(point.x - px, point.z - pz));
+    }
+    return best;
   }
 
   _deleteRoadSelection(pointOnly = false) {
@@ -1242,6 +1847,14 @@ export class LevelEditorUI {
       this._handleRoadPropertyInput(input, commit);
       return;
     }
+    if (key.startsWith('terrain.') || key.startsWith('brush.')) {
+      this._handleTerrainPropertyInput(input, commit);
+      return;
+    }
+    if (key.startsWith('random.')) {
+      this._handleRandomPropertyInput(input);
+      return;
+    }
     if (!this.selectedIds.length) return;
     const selected = this._getSelectedObjects().filter(obj => !this._isLayerLocked(obj.layer));
     if (!selected.length) return;
@@ -1306,6 +1919,54 @@ export class LevelEditorUI {
     }
   }
 
+  _handleTerrainPropertyInput(input, commit = false) {
+    const key = input.dataset.key;
+    const value = this._readInputValue(input);
+    if (value === undefined) return;
+    if (key.startsWith('brush.')) {
+      const prop = key.replace(/^brush\./, '');
+      if (prop === 'mode') this.terrainBrushMode = value;
+      else if (prop === 'radius') this.terrainBrushRadius = value;
+      else if (prop === 'strength') this.terrainBrushStrength = value;
+      else if (prop === 'flattenHeight') this.terrainFlattenHeight = value;
+      this._syncLinkedInputs(input);
+      this._updateTerrainBrushHelper(this._lastPointerPoint);
+      if (commit) this.refresh();
+      return;
+    }
+    const terrain = this.manager?.getTerrain?.(this.selectedTerrainId);
+    if (!terrain) return;
+    const before = commit ? this._lastPropertySnapshot : null;
+    const prop = key.replace(/^terrain\./, '');
+    const patch = {};
+    if (key.startsWith('terrain.position.')) {
+      const axis = key.split('.')[2];
+      patch.position = { ...terrain.position, [axis]: value };
+    } else if (prop === 'color') {
+      patch.color = value;
+    } else {
+      patch[prop] = value;
+    }
+    this.manager?.updateTerrain?.(terrain.id, patch, { save: false });
+    this._markDirty(false);
+    this._syncLinkedInputs(input);
+    this._updateTerrainBrushHelper(this._lastPointerPoint);
+    if (commit) {
+      const after = this._snapshotLayout();
+      if (before && this._layoutChanged(before, after)) this._pushHistory({ label: '修改地形属性', before, after });
+      this._lastPropertySnapshot = this._snapshotLayout();
+      this.refresh();
+    }
+  }
+
+  _handleRandomPropertyInput(input) {
+    const key = input.dataset.key.replace(/^random\./, '');
+    const value = this._readInputValue(input);
+    if (value === undefined && key !== 'seed') return;
+    this.randomSettings[key] = value ?? '';
+    this._syncLinkedInputs(input);
+  }
+
   undo() {
     const entry = this._history.pop();
     if (!entry) return;
@@ -1343,6 +2004,7 @@ export class LevelEditorUI {
       this.selectedRoadId = null;
       this.selectedRoadPointIndex = null;
     }
+    if (this.selectedTerrainId && !this.manager?.getTerrain?.(this.selectedTerrainId)) this.selectedTerrainId = null;
     if (!options.keepDirty) this._dirty = false;
   }
 
@@ -1360,8 +2022,8 @@ export class LevelEditorUI {
   _saveCurrentTrack(announce = true, options = {}) {
     const result = this.manager?.saveCurrentTrack?.() || { ok: false, count: 0, trackId: this.trackId };
     if (result.ok !== false) this._dirty = false;
-    if (announce) this._setStatus(result.ok === false ? `保存失败：${result.error?.message || '无法写入本地存储'}` : `已保存 ${result.count} 个物体 / ${result.roadCount || 0} 条道路到 ${result.trackId}。`);
-    else if (options.auto && result.ok !== false) this._setStatus(`已自动保存 ${result.count} 个物体 / ${result.roadCount || 0} 条道路。`);
+    if (announce) this._setStatus(result.ok === false ? `保存失败：${result.error?.message || '无法写入本地存储'}` : `已保存 ${result.count} 个物体 / ${result.roadCount || 0} 条道路 / ${result.terrainCount || 0} 个地形到 ${result.trackId}。`);
+    else if (options.auto && result.ok !== false) this._setStatus(`已自动保存 ${result.count} 个物体 / ${result.roadCount || 0} 条道路 / ${result.terrainCount || 0} 个地形。`);
     this.onSave?.(result);
     this.refresh();
     return result;
@@ -1405,11 +2067,12 @@ export class LevelEditorUI {
   _exportJson() {
     const layout = this._snapshotLayout();
     const payload = {
-      version: 3,
+      version: 4,
       exportedAt: new Date().toISOString(),
       trackId: this.trackId,
       objects: Array.isArray(layout) ? layout : (layout.objects || []),
       roads: Array.isArray(layout) ? [] : (layout.roads || []),
+      terrains: Array.isArray(layout) ? [] : (layout.terrains || []),
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -1420,7 +2083,7 @@ export class LevelEditorUI {
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
-    this._setStatus(`已导出 ${payload.objects.length} 个物体 / ${payload.roads.length} 条道路。`);
+    this._setStatus(`已导出 ${payload.objects.length} 个物体 / ${payload.roads.length} 条道路 / ${payload.terrains.length} 个地形。`);
   }
 
   async _handleImportFile() {
@@ -1434,14 +2097,15 @@ export class LevelEditorUI {
       if (!normalized?.ok) throw normalized?.error || new Error('导入格式不正确。');
       const objectCount = Array.isArray(normalized.layout) ? normalized.layout.length : (normalized.layout.objects?.length || 0);
       const roadCount = Array.isArray(normalized.layout) ? 0 : (normalized.layout.roads?.length || 0);
-      if (!window.confirm(`导入会覆盖当前关卡布局，共 ${objectCount} 个物体 / ${roadCount} 条道路。继续吗？`)) return;
+      const terrainCount = Array.isArray(normalized.layout) ? 0 : (normalized.layout.terrains?.length || 0);
+      if (!window.confirm(`导入会覆盖当前关卡布局，共 ${objectCount} 个物体 / ${roadCount} 条道路 / ${terrainCount} 个地形。继续吗？`)) return;
       const before = this._snapshotLayout();
       const result = this.manager?.replaceCurrentTrackLayout?.(normalized.layout, { save: false });
       if (result?.ok === false) throw result.error || new Error('导入失败。');
       this.selectedIds = [];
       this._pushHistory({ label: '导入 JSON', before, after: this._snapshotLayout() });
       this._markDirty(false);
-      this._setStatus(`导入完成：${objectCount} 个物体 / ${roadCount} 条道路。`);
+      this._setStatus(`导入完成：${objectCount} 个物体 / ${roadCount} 条道路 / ${terrainCount} 个地形。`);
       this.refresh();
     } catch (err) {
       console.warn('[LevelEditorUI] Import failed:', err);
@@ -1475,7 +2139,10 @@ export class LevelEditorUI {
 
   _pickGround(event) {
     this._setPointer(event);
-    const groundMeshes = this.trackManager?.getCameraGroundMeshes?.() || [];
+    const groundMeshes = [
+      ...(this.manager?.getTerrainMeshes?.() || []),
+      ...(this.trackManager?.getCameraGroundMeshes?.() || []),
+    ];
     const hits = groundMeshes.length ? this._raycaster.intersectObjects(groundMeshes, true) : [];
     const point = hits[0]?.point?.clone?.() || new THREE.Vector3();
     if (!hits.length && !this._raycaster.ray.intersectPlane(this._groundPlane, point)) return null;
@@ -1544,14 +2211,29 @@ export class LevelEditorUI {
     this.toolMode = tool;
     if (tool === 'road') {
       this.selectedIds = [];
+      this.selectedTerrainId = null;
+      this._removePreview();
+    } else if (tool === 'terrain') {
+      this.selectedIds = [];
+      this.selectedRoadId = null;
+      this.selectedRoadPointIndex = null;
+      this._removePreview();
+    } else if (tool === 'random') {
+      this.selectedIds = [];
+      this.selectedRoadId = null;
+      this.selectedRoadPointIndex = null;
+      this.selectedTerrainId = null;
       this._removePreview();
     } else {
       this.selectedRoadId = null;
       this.selectedRoadPointIndex = null;
+      this.selectedTerrainId = null;
+      this._setTerrainBrushHelperVisible(false);
     }
     this._setStatus(`编辑工具：${TOOL_LABELS[tool]}。`);
     this._syncModeButtons();
     this._updateRoadHelpers();
+    this._updateTerrainBrushHelper(this._lastPointerPoint);
     this.refresh();
   }
   _setEditMode(mode) { if (!MODE_LABELS[mode]) return; this.editMode = mode; this._setStatus(`编辑模式：${MODE_LABELS[mode]}。`); this._syncModeButtons(); this._syncSelectionHelpers(); }
@@ -1577,7 +2259,7 @@ export class LevelEditorUI {
     if (redo) redo.disabled = this._redoStack.length === 0;
   }
 
-  _updateSceneHelpers() { this._setGridVisible(this.gridVisible); this._syncSelectionHelpers(); this._updateCollisionHelpers(); this._updateRoadHelpers(); }
+  _updateSceneHelpers() { this._setGridVisible(this.gridVisible); this._syncSelectionHelpers(); this._updateCollisionHelpers(); this._updateRoadHelpers(); this._updateTerrainBrushHelper(this._lastPointerPoint); }
   _setGridVisible(visible) { if (this._gridHelper) this._gridHelper.visible = this.visible && visible; const center = this._getSelectionCenter() || this._lastPointerPoint; if (this._gridHelper && center) this._gridHelper.position.set(center.x, center.y + 0.015, center.z); }
   _syncSelectionHelpers() {
     const center = this._getSelectionCenter();
@@ -1590,6 +2272,21 @@ export class LevelEditorUI {
     this._setGizmoVisible(true);
   }
   _setGizmoVisible(visible) { if (this._gizmo) this._gizmo.visible = this.visible && visible; }
+
+  _updateTerrainBrushHelper(point = null) {
+    if (!this._terrainBrushHelper) return;
+    if (!this.visible || this.toolMode !== 'terrain' || !this.selectedTerrainId || !point) {
+      this._setTerrainBrushHelperVisible(false);
+      return;
+    }
+    this._terrainBrushHelper.position.set(point.x, point.y + 0.08, point.z);
+    this._terrainBrushHelper.scale.setScalar(Math.max(0.1, this.terrainBrushRadius || 1));
+    this._setTerrainBrushHelperVisible(true);
+  }
+
+  _setTerrainBrushHelperVisible(visible) {
+    if (this._terrainBrushHelper) this._terrainBrushHelper.visible = this.visible && visible;
+  }
 
   _updateCollisionHelpers() {
     this._clearCollisionHelpers(false);
@@ -1701,6 +2398,7 @@ export class LevelEditorUI {
   _applyLayerVisibility() {
     for (const obj of this.manager?.objects || []) if (obj.mesh) obj.mesh.visible = obj.destroyed ? false : this._isLayerVisible(obj.layer);
     for (const road of this.manager?.roads || []) if (road.mesh) road.mesh.visible = this._isLayerVisible(road.layer);
+    for (const terrain of this.manager?.terrains || []) if (terrain.mesh) terrain.mesh.visible = terrain.visible !== false && this._isLayerVisible(terrain.layer);
   }
   _isLayerVisible(layerId = 'default') { const layer = this.layers.find(item => item.id === (layerId || 'default')); return layer?.visible !== false; }
   _isLayerLocked(layerId = 'default') { const layer = this.layers.find(item => item.id === (layerId || 'default')); return layer?.locked === true; }
@@ -1711,7 +2409,12 @@ export class LevelEditorUI {
     if (input.tagName === 'SELECT' && input.value === '') return undefined;
     if (input.tagName === 'SELECT' && (input.value === 'true' || input.value === 'false')) return input.value === 'true';
     if (input.type === 'checkbox') return input.checked;
-    if (['type', 'effect', 'layer', 'note', 'road.profile', 'road.generationMode', 'road.moduleId', 'road.layer', 'road.note'].includes(input.dataset.key)) return input.value;
+    if ([
+      'type', 'effect', 'layer', 'note',
+      'road.profile', 'road.generationMode', 'road.moduleId', 'road.layer', 'road.note',
+      'terrain.color', 'terrain.layer', 'terrain.note',
+      'brush.mode', 'random.seed',
+    ].includes(input.dataset.key)) return input.value;
     if (input.dataset.mixed === 'true' && input.value === '') return undefined;
     const value = Number(input.value);
     return Number.isFinite(value) ? value : undefined;
@@ -1719,6 +2422,7 @@ export class LevelEditorUI {
 
   _syncLinkedInputs(input) { const key = input.dataset.key; if (!key) return; const value = input.value; this.propertiesEl.querySelectorAll(`[data-key="${CSS.escape(key)}"]`).forEach(other => { if (other !== input && other.type !== 'checkbox') other.value = value; }); }
   _vectorFields(position = {}) { return `<div class="le-field-wide">坐标${['x', 'y', 'z'].map(axis => `<label class="le-vector-row"><span class="le-vector-axis" style="color:#${AXIS_COLORS[axis].toString(16).padStart(6, '0')}">${axis.toUpperCase()}</span><input data-key="position.${axis}" type="number" step="0.01" value="${Number(position[axis] || 0).toFixed(2)}"></label>`).join('')}</div>`; }
+  _vectorFieldsWithPrefix(prefix, position = {}) { return `<div class="le-field-wide">坐标${['x', 'y', 'z'].map(axis => `<label class="le-vector-row"><span class="le-vector-axis" style="color:#${AXIS_COLORS[axis].toString(16).padStart(6, '0')}">${axis.toUpperCase()}</span><input data-key="${prefix}.${axis}" type="number" step="0.01" value="${Number(position[axis] || 0).toFixed(2)}"></label>`).join('')}</div>`; }
   _roadPointFields(position = {}) { return `<div class="le-field-wide">坐标${['x', 'y', 'z'].map(axis => `<label class="le-vector-row"><span class="le-vector-axis" style="color:#${AXIS_COLORS[axis].toString(16).padStart(6, '0')}">${axis.toUpperCase()}</span><input data-key="road.point.${axis}" type="number" step="0.01" value="${Number(position[axis] || 0).toFixed(2)}"></label>`).join('')}</div>`; }
   _rangeField(key, label, value, min, max, step, mixed = false) { const displayValue = mixed ? '' : Number(value || 0).toFixed(step < 1 ? 2 : 0); return `<label class="le-field-wide">${label}<span class="le-range-row"><input data-key="${key}" data-mixed="${mixed ? 'true' : 'false'}" type="range" min="${min}" max="${max}" step="${step}" value="${mixed ? min : value}"><input data-key="${key}" data-mixed="${mixed ? 'true' : 'false'}" type="number" min="${min}" max="${max}" step="${step}" value="${displayValue}" placeholder="混合"></span></label>`; }
   _checkboxField(key, label, checked) { return `<label class="le-field"><span>${label}</span><input data-key="${key}" type="checkbox" ${checked ? 'checked' : ''}></label>`; }
