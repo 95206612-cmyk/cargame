@@ -89,16 +89,24 @@ export class LevelEditorUI {
     this.terrainBrushRadius = 9;
     this.terrainBrushStrength = 0.45;
     this.terrainFlattenHeight = 0;
+    this.terrainGenSeed = '';
+    this.terrainGenHeight = 6;
+    this.terrainGenScale = 42;
+    this.terrainGenSmooth = 1;
     this.randomSettings = {
       seed: '',
       size: 220,
       roadPoints: 12,
       roadRadius: 64,
       objectCount: 42,
+      cityBlocks: 18,
+      treeCount: 70,
       terrainHeight: 5.5,
       generateTerrain: true,
       generateRoad: true,
       generateObjects: true,
+      generateCity: true,
+      generateVegetation: true,
       closedRoad: true,
     };
     this.randomObjectPool = new Set();
@@ -317,6 +325,11 @@ export class LevelEditorUI {
     this._importInput.accept = 'application/json,.json';
     this._importInput.style.display = 'none';
     this.root.appendChild(this._importInput);
+    this._terrainMapInput = document.createElement('input');
+    this._terrainMapInput.type = 'file';
+    this._terrainMapInput.accept = 'image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp';
+    this._terrainMapInput.style.display = 'none';
+    this.root.appendChild(this._terrainMapInput);
 
     this.parent.appendChild(this.root);
     this.trackSelect = this.root.querySelector('#le-track-select');
@@ -326,6 +339,7 @@ export class LevelEditorUI {
     this.paletteEl = this.root.querySelector('#le-palette');
     this.propertiesEl = this.root.querySelector('#le-properties');
     this.layerListEl = this.root.querySelector('#le-layer-list');
+    this._pendingTerrainMapKind = null;
 
     this._renderTrackOptions();
     this._wireUiEvents();
@@ -433,6 +447,10 @@ export class LevelEditorUI {
       if (action === 'delete-terrain') this._deleteTerrain();
       if (action === 'reset-terrain') this._resetTerrainHeights(false);
       if (action === 'flatten-terrain') this._resetTerrainHeights(true);
+      if (action === 'randomize-terrain') this._randomizeSelectedTerrain();
+      if (action === 'import-terrain-heightmap') this._chooseTerrainMap('height');
+      if (action === 'import-terrain-vertex-color') this._chooseTerrainMap('vertexColor');
+      if (action === 'import-terrain-weight-map') this._chooseTerrainMap('weight');
       if (action === 'generate-random-level') this._generateRandomLevel();
       if (action === 'random-select-all') this._selectAllRandomResources();
       if (action === 'add-layer') this._addLayer();
@@ -493,6 +511,7 @@ export class LevelEditorUI {
     this.propertiesEl.addEventListener('input', event => this._handlePropertyInput(event, false));
     this.propertiesEl.addEventListener('change', event => this._handlePropertyInput(event, true));
     this._importInput.addEventListener('change', () => this._handleImportFile());
+    this._terrainMapInput.addEventListener('change', () => this._handleTerrainMapFile());
   }
 
   _bindEvents() {
@@ -918,6 +937,12 @@ export class LevelEditorUI {
         ${this._rangeField('brush.strength', '强度', this.terrainBrushStrength, 0.02, 3, 0.01)}
         ${this._rangeField('brush.flattenHeight', '夷平高度', this.terrainFlattenHeight, -10, 25, 0.05)}
       </div>
+      <div class="le-group"><div class="le-group-title">随机地形</div>
+        <label class="le-field">种子<input data-key="terrainGen.seed" value="${this._escape(this.terrainGenSeed || '')}" placeholder="留空则随机"></label>
+        ${this._rangeField('terrainGen.height', '起伏高度', this.terrainGenHeight, 0, 32, 0.25)}
+        ${this._rangeField('terrainGen.scale', '噪声尺度', this.terrainGenScale, 8, 160, 1)}
+        ${this._rangeField('terrainGen.smooth', '平滑次数', this.terrainGenSmooth, 0, 6, 1)}
+      </div>
       <div class="le-group"><div class="le-group-title">材质与物理</div>
         <label class="le-field">颜色<input data-key="terrain.color" type="color" value="#${Number(terrain.color || 0).toString(16).padStart(6, '0').slice(-6)}"></label>
         ${this._rangeField('terrain.roughness', '粗糙度', terrain.roughness, 0, 1, 0.01)}
@@ -928,8 +953,12 @@ export class LevelEditorUI {
       </div>
       <div class="le-prop-actions">
         <button class="le-btn" data-action="new-terrain">新建地形</button>
+        <button class="le-btn le-primary" data-action="randomize-terrain">随机生成地形</button>
         <button class="le-btn" data-action="flatten-terrain">全部夷平</button>
         <button class="le-btn" data-action="reset-terrain">重置高度</button>
+        <button class="le-btn" data-action="import-terrain-heightmap">导入高度图</button>
+        <button class="le-btn" data-action="import-terrain-vertex-color">导入顶点色图</button>
+        <button class="le-btn" data-action="import-terrain-weight-map">导入权重图</button>
         <button class="le-btn le-danger" data-action="delete-terrain">删除地形</button>
       </div>
     `;
@@ -943,6 +972,8 @@ export class LevelEditorUI {
         ${this._checkboxField('random.generateTerrain', '生成地形', s.generateTerrain)}
         ${this._checkboxField('random.generateRoad', '生成道路', s.generateRoad)}
         ${this._checkboxField('random.generateObjects', '生成物体/功能点', s.generateObjects)}
+        ${this._checkboxField('random.generateCity', 'PCG 城市街区', s.generateCity)}
+        ${this._checkboxField('random.generateVegetation', 'PCG 植被树木', s.generateVegetation)}
         ${this._checkboxField('random.closedRoad', '闭合跑道', s.closedRoad)}
       </div>
       <div class="le-group"><div class="le-group-title">关卡参数</div>
@@ -951,6 +982,8 @@ export class LevelEditorUI {
         ${this._rangeField('random.roadPoints', '道路点数', s.roadPoints, 4, 28, 1)}
         ${this._rangeField('random.roadRadius', '道路半径', s.roadRadius, 24, 240, 2)}
         ${this._rangeField('random.objectCount', '物体数量', s.objectCount, 0, 180, 1)}
+        ${this._rangeField('random.cityBlocks', '城市建筑数', s.cityBlocks, 0, 80, 1)}
+        ${this._rangeField('random.treeCount', '植被树木数', s.treeCount, 0, 260, 1)}
         ${this._rangeField('random.terrainHeight', '地形起伏', s.terrainHeight, 0, 24, 0.25)}
       </div>
       <div class="le-group"><div class="le-group-title">资源池状态</div>
@@ -1534,6 +1567,201 @@ export class LevelEditorUI {
     this.refresh();
   }
 
+  _randomizeSelectedTerrain() {
+    const terrain = this.manager?.getTerrain?.(this.selectedTerrainId);
+    if (!terrain) return;
+    const before = this._snapshotLayout();
+    const seed = this.terrainGenSeed || `${Date.now()}-${terrain.id}`;
+    const height = Number(this.terrainGenHeight) || 0;
+    const scale = Math.max(1, Number(this.terrainGenScale) || 42);
+    const heights = [];
+    const halfW = terrain.width * 0.5;
+    const halfD = terrain.depth * 0.5;
+    for (let z = 0; z <= terrain.segmentsZ; z++) {
+      const wz = -halfD + (z / Math.max(1, terrain.segmentsZ)) * terrain.depth;
+      for (let x = 0; x <= terrain.segmentsX; x++) {
+        const wx = -halfW + (x / Math.max(1, terrain.segmentsX)) * terrain.width;
+        const n = this._fractalValueNoise(wx / scale, wz / scale, seed);
+        heights.push((terrain.baseHeight || 0) + n * height);
+      }
+    }
+    let smoothed = heights;
+    const passes = Math.round(clamp(this.terrainGenSmooth, 0, 6, 1));
+    for (let i = 0; i < passes; i++) smoothed = this._smoothTerrainHeights(smoothed, terrain.segmentsX, terrain.segmentsZ, 0.55);
+    this.manager?.updateTerrain?.(terrain.id, { heights: smoothed }, { save: false });
+    const after = this._snapshotLayout();
+    this._pushHistory({ label: '随机生成地形', before, after });
+    this._markDirty(false);
+    this._setStatus('已随机生成当前地形高度。');
+    this.refresh();
+  }
+
+  _chooseTerrainMap(kind) {
+    const terrain = this.manager?.getTerrain?.(this.selectedTerrainId);
+    if (!terrain) {
+      this._setStatus('请先选择一个地形，再导入贴图。');
+      return;
+    }
+    this._pendingTerrainMapKind = kind;
+    this._terrainMapInput.value = '';
+    this._terrainMapInput.click();
+  }
+
+  async _handleTerrainMapFile() {
+    const file = this._terrainMapInput.files?.[0];
+    const kind = this._pendingTerrainMapKind;
+    this._terrainMapInput.value = '';
+    this._pendingTerrainMapKind = null;
+    if (!file || !kind) return;
+    const terrain = this.manager?.getTerrain?.(this.selectedTerrainId);
+    if (!terrain) return;
+    try {
+      const imageData = await this._loadImageData(file);
+      const before = this._snapshotLayout();
+      const patch = this._terrainPatchFromImage(terrain, imageData, kind);
+      this.manager?.updateTerrain?.(terrain.id, patch, { save: false });
+      const label = kind === 'height' ? '导入高度图' : kind === 'vertexColor' ? '导入顶点色图' : '导入权重图';
+      this._pushHistory({ label, before, after: this._snapshotLayout() });
+      this._markDirty(false);
+      this._setStatus(`${label}完成：${file.name}`);
+      this.refresh();
+    } catch (err) {
+      console.warn('[LevelEditorUI] Terrain map import failed:', err);
+      this._setStatus(`导入贴图失败：${err?.message || '无法读取图片'}`);
+    }
+  }
+
+  _terrainPatchFromImage(terrain, imageData, kind) {
+    const cols = terrain.segmentsX + 1;
+    const rows = terrain.segmentsZ + 1;
+    const sample = (u, v) => {
+      const x = Math.max(0, Math.min(imageData.width - 1, Math.round(u * (imageData.width - 1))));
+      const y = Math.max(0, Math.min(imageData.height - 1, Math.round(v * (imageData.height - 1))));
+      const idx = (y * imageData.width + x) * 4;
+      return [
+        imageData.data[idx] / 255,
+        imageData.data[idx + 1] / 255,
+        imageData.data[idx + 2] / 255,
+        imageData.data[idx + 3] / 255,
+      ];
+    };
+    if (kind === 'height') {
+      const minH = terrain.baseHeight - Math.max(0.1, Number(this.terrainGenHeight) || 6);
+      const maxH = terrain.baseHeight + Math.max(0.1, Number(this.terrainGenHeight) || 6);
+      const heights = [];
+      for (let z = 0; z < rows; z++) {
+        for (let x = 0; x < cols; x++) {
+          const [r, g, b] = sample(x / Math.max(1, cols - 1), z / Math.max(1, rows - 1));
+          const gray = r * 0.299 + g * 0.587 + b * 0.114;
+          heights.push(minH + gray * (maxH - minH));
+        }
+      }
+      return { heights };
+    }
+    if (kind === 'vertexColor') {
+      const vertexColors = [];
+      for (let z = 0; z < rows; z++) {
+        for (let x = 0; x < cols; x++) {
+          const [r, g, b] = sample(x / Math.max(1, cols - 1), z / Math.max(1, rows - 1));
+          vertexColors.push(r, g, b);
+        }
+      }
+      return { vertexColors };
+    }
+    const weightMap = [];
+    for (let z = 0; z < rows; z++) {
+      for (let x = 0; x < cols; x++) {
+        const channels = sample(x / Math.max(1, cols - 1), z / Math.max(1, rows - 1));
+        const sum = Math.max(0.0001, channels[0] + channels[1] + channels[2] + channels[3]);
+        weightMap.push(channels[0] / sum, channels[1] / sum, channels[2] / sum, channels[3] / sum);
+      }
+    }
+    return { weightMap };
+  }
+
+  _loadImageData(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const image = new Image();
+      image.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, image.naturalWidth || image.width);
+          canvas.height = Math.max(1, image.naturalHeight || image.height);
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          ctx.drawImage(image, 0, 0);
+          const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          URL.revokeObjectURL(url);
+          resolve(data);
+        } catch (err) {
+          URL.revokeObjectURL(url);
+          reject(err);
+        }
+      };
+      image.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('图片加载失败'));
+      };
+      image.src = url;
+    });
+  }
+
+  _fractalValueNoise(x, z, seed = '') {
+    let total = 0;
+    let amp = 1;
+    let freq = 1;
+    let norm = 0;
+    for (let octave = 0; octave < 4; octave++) {
+      total += this._valueNoise2D(x * freq, z * freq, seed, octave) * amp;
+      norm += amp;
+      amp *= 0.5;
+      freq *= 2.03;
+    }
+    return norm ? total / norm : 0;
+  }
+
+  _valueNoise2D(x, z, seed = '', octave = 0) {
+    const x0 = Math.floor(x);
+    const z0 = Math.floor(z);
+    const tx = x - x0;
+    const tz = z - z0;
+    const fade = t => t * t * (3 - 2 * t);
+    const hash = (ix, iz) => {
+      const local = this._makeRandom(`${ix}:${iz}:${seed || this.terrainGenSeed || 'terrain'}:${octave}`);
+      return local() * 2 - 1;
+    };
+    const a = hash(x0, z0);
+    const b = hash(x0 + 1, z0);
+    const c = hash(x0, z0 + 1);
+    const d = hash(x0 + 1, z0 + 1);
+    const u = fade(tx);
+    const v = fade(tz);
+    return (a + (b - a) * u) + ((c + (d - c) * u) - (a + (b - a) * u)) * v;
+  }
+
+  _smoothTerrainHeights(heights, segmentsX, segmentsZ, amount = 0.5) {
+    const cols = segmentsX + 1;
+    const rows = segmentsZ + 1;
+    const next = heights.slice();
+    for (let z = 0; z < rows; z++) {
+      for (let x = 0; x < cols; x++) {
+        let sum = 0;
+        let count = 0;
+        for (let dz = -1; dz <= 1; dz++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const sx = Math.max(0, Math.min(cols - 1, x + dx));
+            const sz = Math.max(0, Math.min(rows - 1, z + dz));
+            sum += heights[sz * cols + sx] || 0;
+            count++;
+          }
+        }
+        const idx = z * cols + x;
+        next[idx] = heights[idx] + ((sum / Math.max(1, count)) - heights[idx]) * amount;
+      }
+    }
+    return next;
+  }
+
   _ensureRandomPools() {
     if (this._randomPoolsInitialized) return;
     this.randomObjectPool = new Set((this.manager?.getTypes?.() || []).map(type => type.id));
@@ -1653,6 +1881,9 @@ export class LevelEditorUI {
     const objects = [];
     if (settings.generateObjects && objectTypes.length) {
       const boostTypes = objectTypes.filter(type => type.effect === 'boost' || /boost|nitro|pad/i.test(type.id));
+      const cityTypes = objectTypes.filter(type => /building|house|city|roadside_building/i.test(type.id) || /建筑/.test(type.label || ''));
+      const treeTypes = objectTypes.filter(type => /tree|vegetation|forest|tree_cluster/i.test(type.id) || /树|植被/.test(type.label || ''));
+      const lampTypes = objectTypes.filter(type => /lamp|light|post|lamp_post/i.test(type.id) || /灯/.test(type.label || ''));
       const count = Math.round(clamp(settings.objectCount, 0, 180, 42));
       for (let i = 0; i < count; i++) {
         const placeBoost = boostTypes.length && roadPoints.length >= 2 && i % 7 === 0;
@@ -1687,6 +1918,67 @@ export class LevelEditorUI {
           layer: 'default',
           note: placeBoost ? '随机功能点' : '随机摆放物',
         });
+      }
+      if (settings.generateCity && cityTypes.length) {
+        const cityCount = Math.round(clamp(settings.cityBlocks, 0, 80, 18));
+        for (let i = 0; i < cityCount; i++) {
+          const placement = this._sampleRoadsidePlacement(roadPoints, roadWidth, rng, settings.closedRoad, 10 + rng() * 28);
+          if (!placement) continue;
+          const type = cityTypes[Math.floor(rng() * cityTypes.length)];
+          objects.push({
+            type: type.id,
+            position: { x: placement.x, y: 0.15, z: placement.z },
+            rotationY: placement.yaw + (rng() - 0.5) * 0.35,
+            scale: 1.2 + rng() * 1.35,
+            snapToGround: true,
+            layer: 'default',
+            note: 'PCG 城市建筑',
+          });
+        }
+        if (lampTypes.length && roadPoints.length >= 2) {
+          const lampCount = Math.min(80, Math.max(4, Math.floor(roadPoints.length * 2.4)));
+          for (let i = 0; i < lampCount; i++) {
+            const placement = this._sampleRoadsidePlacement(roadPoints, roadWidth, rng, settings.closedRoad, roadWidth * 0.75 + (i % 2) * 2.6);
+            if (!placement) continue;
+            const type = lampTypes[Math.floor(rng() * lampTypes.length)];
+            objects.push({
+              type: type.id,
+              position: { x: placement.x, y: 0.14, z: placement.z },
+              rotationY: placement.yaw,
+              scale: 0.9 + rng() * 0.25,
+              snapToGround: true,
+              layer: 'default',
+              note: 'PCG 路灯',
+            });
+          }
+        }
+      }
+      if (settings.generateVegetation && treeTypes.length) {
+        const treeCount = Math.round(clamp(settings.treeCount, 0, 260, 70));
+        for (let i = 0; i < treeCount; i++) {
+          let pos = null;
+          for (let attempt = 0; attempt < 24; attempt++) {
+            const angle = rng() * Math.PI * 2;
+            const radius = (0.22 + rng() * 0.75) * size * 0.5;
+            const candidate = { x: Math.cos(angle) * radius, y: 0.12, z: Math.sin(angle) * radius };
+            const roadDist = roadPoints.length >= 2 ? this._distanceToPolylineXZ(candidate, roadPoints, Boolean(settings.closedRoad)) : Infinity;
+            if (roadDist > roadWidth * 3.2 && roadDist < size * 0.46) {
+              pos = candidate;
+              break;
+            }
+          }
+          if (!pos) continue;
+          const type = treeTypes[Math.floor(rng() * treeTypes.length)];
+          objects.push({
+            type: type.id,
+            position: pos,
+            rotationY: rng() * Math.PI * 2,
+            scale: 0.75 + rng() * 1.45,
+            snapToGround: true,
+            layer: 'default',
+            note: 'PCG 植被树木',
+          });
+        }
       }
     }
 
@@ -1747,6 +2039,29 @@ export class LevelEditorUI {
       best = Math.min(best, Math.hypot(point.x - px, point.z - pz));
     }
     return best;
+  }
+
+  _sampleRoadsidePlacement(points = [], roadWidth = 8, rng = Math.random, closed = false, offset = 14) {
+    if (points.length < 2) return null;
+    const count = closed ? points.length : points.length - 1;
+    const idx = Math.floor(rng() * Math.max(1, count));
+    const a = points[idx];
+    const b = points[(idx + 1) % points.length] || points[idx];
+    const t = 0.12 + rng() * 0.76;
+    const x = a.x + (b.x - a.x) * t;
+    const z = a.z + (b.z - a.z) * t;
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const len = Math.hypot(dx, dz) || 1;
+    const side = rng() < 0.5 ? -1 : 1;
+    const lateral = Math.max(roadWidth * 0.75, offset) * side;
+    const nx = -dz / len;
+    const nz = dx / len;
+    return {
+      x: x + nx * lateral,
+      z: z + nz * lateral,
+      yaw: Math.atan2(dx, dz) + (side > 0 ? Math.PI : 0),
+    };
   }
 
   _deleteRoadSelection(pointOnly = false) {
@@ -1847,7 +2162,7 @@ export class LevelEditorUI {
       this._handleRoadPropertyInput(input, commit);
       return;
     }
-    if (key.startsWith('terrain.') || key.startsWith('brush.')) {
+    if (key.startsWith('terrain.') || key.startsWith('brush.') || key.startsWith('terrainGen.')) {
       this._handleTerrainPropertyInput(input, commit);
       return;
     }
@@ -1932,6 +2247,15 @@ export class LevelEditorUI {
       this._syncLinkedInputs(input);
       this._updateTerrainBrushHelper(this._lastPointerPoint);
       if (commit) this.refresh();
+      return;
+    }
+    if (key.startsWith('terrainGen.')) {
+      const prop = key.replace(/^terrainGen\./, '');
+      if (prop === 'seed') this.terrainGenSeed = value;
+      else if (prop === 'height') this.terrainGenHeight = value;
+      else if (prop === 'scale') this.terrainGenScale = value;
+      else if (prop === 'smooth') this.terrainGenSmooth = value;
+      this._syncLinkedInputs(input);
       return;
     }
     const terrain = this.manager?.getTerrain?.(this.selectedTerrainId);
@@ -2413,7 +2737,7 @@ export class LevelEditorUI {
       'type', 'effect', 'layer', 'note',
       'road.profile', 'road.generationMode', 'road.moduleId', 'road.layer', 'road.note',
       'terrain.color', 'terrain.layer', 'terrain.note',
-      'brush.mode', 'random.seed',
+      'brush.mode', 'random.seed', 'terrainGen.seed',
     ].includes(input.dataset.key)) return input.value;
     if (input.dataset.mixed === 'true' && input.value === '') return undefined;
     const value = Number(input.value);

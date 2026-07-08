@@ -739,6 +739,16 @@ export class InteractiveObjectManager {
     if ('visible' in patch) terrain.visible = Boolean(patch.visible);
     if ('layer' in patch) terrain.layer = patch.layer || 'default';
     if ('note' in patch) terrain.note = String(patch.note || '');
+    if (Array.isArray(patch.vertexColors)) {
+      const expected = (terrain.segmentsX + 1) * (terrain.segmentsZ + 1) * 3;
+      terrain.vertexColors = patch.vertexColors.slice(0, expected).map(value => clamp(value, 0, 1, 0));
+      while (terrain.vertexColors.length < expected) terrain.vertexColors.push(1);
+    }
+    if (Array.isArray(patch.weightMap)) {
+      const expected = (terrain.segmentsX + 1) * (terrain.segmentsZ + 1) * 4;
+      terrain.weightMap = patch.weightMap.slice(0, expected).map(value => clamp(value, 0, 1, 0));
+      while (terrain.weightMap.length < expected) terrain.weightMap.push(0);
+    }
     if (Array.isArray(patch.heights)) {
       const expected = (terrain.segmentsX + 1) * (terrain.segmentsZ + 1);
       terrain.heights = patch.heights.slice(0, expected).map(value => clamp(value, -80, 120, terrain.baseHeight));
@@ -974,7 +984,7 @@ export class InteractiveObjectManager {
   }
 
   serializeTerrain(terrain) {
-    return {
+    const data = {
       id: terrain.id,
       width: terrain.width,
       depth: terrain.depth,
@@ -983,6 +993,8 @@ export class InteractiveObjectManager {
       position: { ...terrain.position },
       baseHeight: terrain.baseHeight,
       heights: terrain.heights.map(height => Number(height) || 0),
+      vertexColors: Array.isArray(terrain.vertexColors) ? terrain.vertexColors.map(value => Number(value) || 0) : undefined,
+      weightMap: Array.isArray(terrain.weightMap) ? terrain.weightMap.map(value => Number(value) || 0) : undefined,
       color: terrain.color,
       roughness: terrain.roughness,
       metalness: terrain.metalness,
@@ -991,6 +1003,9 @@ export class InteractiveObjectManager {
       layer: terrain.layer || 'default',
       note: terrain.note || '',
     };
+    if (!Array.isArray(terrain.vertexColors)) delete data.vertexColors;
+    if (!Array.isArray(terrain.weightMap)) delete data.weightMap;
+    return data;
   }
 
   resolveVehicleContact(vehiclePhysics, delta = 0.016) {
@@ -1297,6 +1312,16 @@ export class InteractiveObjectManager {
       ? data.heights.slice(0, expected).map(value => clamp(value, -80, 120, baseHeight))
       : [];
     while (heights.length < expected) heights.push(baseHeight);
+    const vertexColorExpected = expected * 3;
+    const vertexColors = Array.isArray(data.vertexColors)
+      ? data.vertexColors.slice(0, vertexColorExpected).map(value => clamp(value, 0, 1, 1))
+      : null;
+    if (vertexColors) while (vertexColors.length < vertexColorExpected) vertexColors.push(1);
+    const weightExpected = expected * 4;
+    const weightMap = Array.isArray(data.weightMap)
+      ? data.weightMap.slice(0, weightExpected).map(value => clamp(value, 0, 1, 0))
+      : null;
+    if (weightMap) while (weightMap.length < weightExpected) weightMap.push(0);
     return {
       id: preserveId && data.id ? String(data.id) : this._makeTerrainId(),
       width: clamp(data.width, 16, 1024, TERRAIN_DEFAULTS.width),
@@ -1306,6 +1331,8 @@ export class InteractiveObjectManager {
       position: cloneVectorLike(data.position),
       baseHeight,
       heights,
+      vertexColors,
+      weightMap,
       color: normalizeColor(data.color, TERRAIN_DEFAULTS.color),
       roughness: clamp(data.roughness, 0, 1, TERRAIN_DEFAULTS.roughness),
       metalness: clamp(data.metalness, 0, 1, TERRAIN_DEFAULTS.metalness),
@@ -1327,6 +1354,7 @@ export class InteractiveObjectManager {
       roughness: terrain.roughness,
       metalness: terrain.metalness,
       side: THREE.DoubleSide,
+      vertexColors: Boolean(geometry.getAttribute('color')),
     });
     const mesh = new THREE.Mesh(geometry, material);
     mesh.name = `editor-terrain-${terrain.id}`;
@@ -1348,6 +1376,7 @@ export class InteractiveObjectManager {
     const cols = sx + 1;
     const rows = sz + 1;
     const positions = [];
+    const colors = [];
     const uvs = [];
     const indices = [];
     const halfW = terrain.width * 0.5;
@@ -1358,6 +1387,8 @@ export class InteractiveObjectManager {
         const u = x / Math.max(1, sx);
         const idx = z * cols + x;
         positions.push(-halfW + u * terrain.width, terrain.heights[idx] ?? terrain.baseHeight, -halfD + v * terrain.depth);
+        const color = this._terrainVertexColor(terrain, idx);
+        if (color) colors.push(color.r, color.g, color.b);
         uvs.push(u * 8, v * 8);
       }
     }
@@ -1372,12 +1403,46 @@ export class InteractiveObjectManager {
     }
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    if (colors.length === positions.length) geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
     geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
     geometry.setIndex(indices);
     geometry.computeVertexNormals();
     geometry.computeBoundingBox();
     geometry.computeBoundingSphere();
     return geometry;
+  }
+
+  _terrainVertexColor(terrain, idx) {
+    if (Array.isArray(terrain.vertexColors) && terrain.vertexColors.length >= (idx + 1) * 3) {
+      return {
+        r: terrain.vertexColors[idx * 3],
+        g: terrain.vertexColors[idx * 3 + 1],
+        b: terrain.vertexColors[idx * 3 + 2],
+      };
+    }
+    if (Array.isArray(terrain.weightMap) && terrain.weightMap.length >= (idx + 1) * 4) {
+      const weights = [
+        terrain.weightMap[idx * 4],
+        terrain.weightMap[idx * 4 + 1],
+        terrain.weightMap[idx * 4 + 2],
+        terrain.weightMap[idx * 4 + 3],
+      ];
+      const sum = Math.max(0.0001, weights.reduce((acc, value) => acc + Math.max(0, value), 0));
+      const palette = [
+        { r: 0.28, g: 0.47, b: 0.22 }, // grass
+        { r: 0.50, g: 0.34, b: 0.20 }, // dirt
+        { r: 0.48, g: 0.48, b: 0.46 }, // rock
+        { r: 0.70, g: 0.62, b: 0.38 }, // sand
+      ];
+      return palette.reduce((acc, color, channel) => {
+        const w = Math.max(0, weights[channel]) / sum;
+        acc.r += color.r * w;
+        acc.g += color.g * w;
+        acc.b += color.b * w;
+        return acc;
+      }, { r: 0, g: 0, b: 0 });
+    }
+    return null;
   }
 
   _resampleTerrainHeights(terrain, nextX, nextZ) {
